@@ -107,6 +107,6 @@ if __name__ == "__main__":
     
     # Balance l'historique global que tu veux, tu peux couper quand tu veux avec Ctrl+C
     archiver.download_history(
-        start_date='2025-02-01',
-        end_date='2025-12-31'
+        start_date='2024-05-10',
+        end_date='2026-06-09'
     )

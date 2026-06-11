@@ -226,6 +226,6 @@ if __name__ == "__main__":
     
     # Lancement sur la plage temporelle complète de ton choix
     pipeline.process_pipeline(
-        start_date='2025-01-01',
-        end_date='2025-02-28'
+        start_date='2016-01-01',
+        end_date='2026-06-10'
     )

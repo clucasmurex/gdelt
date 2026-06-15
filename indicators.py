@@ -207,8 +207,8 @@ if __name__ == "__main__":
     # Exécution sur une plage temporelle au choix (Ex: Rotation Fin 2022 / Début 2023)
     final_alpha_matrix = generate_gdelt_indices(
         parquet_dir=source_db,
-        start_date='2022-06-01',
-        end_date='2023-06-01',
+        start_date='2015-02-01',
+        end_date='2026-06-01',
         alpha=1.0,   # Poids positif
         beta=2.0     # Poids négatif accentué (Aversion aux pertes)
     )

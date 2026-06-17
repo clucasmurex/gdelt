@@ -10,11 +10,13 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 
-def parse_zip_worker(zip_filepath):
+def parse_zip_worker(args):
     """
     Ouvre un ZIP local en mémoire de manière ultra-optimisée.
     Ne charge STRICTEMENT que les colonnes demandées pour économiser la RAM.
     """
+    zip_filepath, is_translated = args
+    
     target_indices = [
         0,   # GKGRECORDID
         1,   # V2.1DATE
@@ -29,7 +31,7 @@ def parse_zip_worker(zip_filepath):
         13,  # V1ORGANIZATIONS
         15,  # V1.5TONE
         17,  # V2GCAM
-        26   # V2.1TRANSLATIONINFO (approx. fin du schéma standard)
+        26   # V2.1TRANSLATIONINFO
     ]
 
     column_names = [
@@ -65,10 +67,9 @@ def parse_zip_worker(zip_filepath):
                 
                 # --- OPTIMISATION DU STOCKAGE DE LA SÉRIE TEMPORELLE ---
                 # On nettoie immédiatement la colonne Tone pour économiser des dizaines de Go de texte
-                # V1.5TONE est une string formatée ainsi : "Tone,Positive,Negative,Polarity,Activity,SelfGroup,WordCount"
                 tone_split = df['Tone_Raw'].str.split(',', expand=False)
                 
-                # Extraction du sentiment net (index 0) et conversion en float léger (4 octets au lieu de 8)
+                # Extraction du sentiment net (index 0) et conversion en float léger
                 df['Tone'] = tone_split.str[0]
                 df['Tone'] = pd.to_numeric(df['Tone'], errors='coerce').fillna(0.0).astype('float32')
                 
@@ -76,12 +77,16 @@ def parse_zip_worker(zip_filepath):
                 df['WordCount'] = tone_split.str[6]
                 df['WordCount'] = pd.to_numeric(df['WordCount'], errors='coerce').fillna(0).astype('int32')
                 
+                # Ajout du flag de traduction (0 = Anglais natif, 1 = Traduit) en format ultra-léger (1 octet)
+                df['translated'] = int(is_translated)
+                df['translated'] = df['translated'].astype('uint8')
+                
                 # On supprime la lourde chaîne de caractères brute
                 df.drop(columns=['Tone_Raw'], inplace=True)
                 
         return df
     except Exception:
-        # En cas de fichier ZIP corrompu (coupure réseau), on renvoie None pour ne pas bloquer le pipeline
+        # En cas de fichier ZIP corrompu, on renvoie None pour ne pas bloquer le pipeline
         return None
 
 def download_file_worker(url, temp_dir):
@@ -113,54 +118,67 @@ class GDELTRollingPipeline:
         self.final_dir = Path(final_dir)
         self.net_workers = net_workers
         self.cpu_workers = cpu_workers
-        self.valid_gkg_urls = set()
+        
+        # Utilisation d'un dictionnaire { url: is_translated (True/False) } pour dédoublonner à la source
+        self.valid_gkg_urls = {}
         
         self.temp_dir.mkdir(exist_ok=True, parents=True)
         self.final_dir.mkdir(exist_ok=True, parents=True)
 
-    def load_master_list(self):
-        """Récupère la liste officielle des fichiers existants sur GDELT."""
-        print("📋 Chargement de la Master File List GDELT...")
-        master_url = "http://data.gdeltproject.org/gdeltv2/masterfilelist.txt"
+    def _fetch_master_list(self, url, is_translation_list=False):
+        """Méthode interne pour parser une liste GDELT spécifique."""
+        count = 0
         try:
-            req = urllib.request.Request(master_url, headers={'User-Agent': 'Mozilla/5.0'})
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=30) as response:
                 for line in response:
                     line_str = line.decode('utf-8').strip()
                     if not line_str: continue
-                    url = line_str.split(' ')[-1]
-                    if 'gkg.csv.zip' in url:
-                        self.valid_gkg_urls.add(url)
-            print(f"✓ {len(self.valid_gkg_urls):,} fichiers GKG uniques répertoriés.")
+                    file_url = line_str.split(' ')[-1]
+                    if 'gkg.csv.zip' in file_url:
+                        # Si le fichier existe déjà et qu'on traite la liste translingue, 
+                        # elle écrase la version anglaise car elle apporte la valeur ajoutée de la traduction.
+                        self.valid_gkg_urls[file_url] = is_translation_list
+                        count += 1
+            return count
         except Exception as e:
-            print(f"💥 Erreur critique Master List : {e}")
-            sys.exit(1)
+            print(f"💥 Erreur lors de la récupération de {url} : {e}")
+            return 0
+
+    def load_master_lists(self):
+        """Récupère et fusionne la liste officielle et la liste translingue de GDELT."""
+        print("📋 Chargement de la Master File List GDELT (English)...")
+        english_url = "http://data.gdeltproject.org/gdeltv2/masterfilelist.txt"
+        eng_count = self._fetch_master_list(english_url, is_translation_list=False)
+        print(f"  ✓ {eng_count:,} fichiers GKG anglophones identifiés.")
+
+        print("📋 Chargement de la Master File List GDELT (Translingual)...")
+        trans_url = "http://data.gdeltproject.org/gdeltv2/masterfilelist-translation.txt"
+        trans_count = self._fetch_master_list(trans_url, is_translation_list=True)
+        print(f"  ✓ {trans_count:,} fichiers GKG translingues identifiés.")
+        
+        print(f"🎯 Total après dédoublonnage strict : {len(self.valid_gkg_urls):,} fichiers uniques prêts à être traités.")
 
     def generate_months_list(self, start_date, end_date):
-            """Génère la liste des chaînes YYYYMM de manière robuste."""
-            start = datetime.strptime(start_date, '%Y-%m-%d')
-            end = datetime.strptime(end_date, '%Y-%m-%d')
+        """Génère la liste des chaînes YYYYMM de manière robuste."""
+        start = datetime.strptime(start_date, '%Y-%m-%d')
+        end = datetime.strptime(end_date, '%Y-%m-%d')
+        
+        months = []
+        current = datetime(start.year, start.month, 1)
+        
+        while current <= end:
+            months.append(current.strftime('%Y%m'))
+            next_month_approx = current + timedelta(days=32)
+            current = datetime(next_month_approx.year, next_month_approx.month, 1)
             
-            months = []
-            # On se cale au premier jour du mois pour éviter le piège des fins de mois (ex: 31)
-            current = datetime(start.year, start.month, 1)
-            
-            while current <= end:
-                months.append(current.strftime('%Y%m'))
-                
-                # Calcul mathématique propre pour passer au mois suivant :
-                # On ajoute 32 jours pour être SÛR de basculer au mois d'après, 
-                # puis on se recalibre au 1er jour de ce nouveau mois.
-                next_month_approx = current + timedelta(days=32)
-                current = datetime(next_month_approx.year, next_month_approx.month, 1)
-                
-            return months
+        return months
 
     def process_pipeline(self, start_date, end_date):
-        self.load_master_list()
+        self.load_master_lists()
         months_to_process = self.generate_months_list(start_date, end_date)
         
-        print(f"\n🚀 SÉCURISATION DU PIPELINE ROULANT (MODE ULTRA-COMPACT)")
+        print(f"\n🚀 SÉCURISATION DU PIPELINE ROULANT MULTILINGUE (MODE ULTRA-COMPACT)")
         print(f"📂 Zone Tampon Éphémère : {self.temp_dir}")
         print(f"💾 Base Parquet Finale   : {self.final_dir}\n")
 
@@ -175,7 +193,7 @@ class GDELTRollingPipeline:
             print(f"🔄 [{idx}/{len(months_to_process)}] Traitement du mois : {month_str}")
             
             # Sélection des URLs associées au mois en cours
-            month_urls = [url for url in self.valid_gkg_urls if url.split('/')[-1].startswith(month_str)]
+            month_urls = [url for url in self.valid_gkg_urls.keys() if url.split('/')[-1].startswith(month_str)]
             total_files = len(month_urls)
             
             if total_files == 0:
@@ -197,11 +215,19 @@ class GDELTRollingPipeline:
 
             # ÉTAPE 2 : Extraction sélective & Compilation multi-processus
             print(f"  🗜️  Parsing sélectif et compression Parquet via {self.cpu_workers} cœurs...")
-            local_zips = list(self.temp_dir.glob('*.zip'))
-            month_dfs = []
+            
+            # Préparation des arguments pour le ProcessPool (chemin_local, is_translated)
+            worker_tasks = []
+            for url in month_urls:
+                filename = url.split('/')[-1]
+                local_path = self.temp_dir / filename
+                if local_path.exists() and local_path.stat().st_size > 0:
+                    is_translated = self.valid_gkg_urls[url]
+                    worker_tasks.append((str(local_path), is_translated))
 
+            month_dfs = []
             with ProcessPoolExecutor(max_workers=self.cpu_workers) as cpu_executor:
-                cpu_futures = {cpu_executor.submit(parse_zip_worker, str(p)): p for p in local_zips}
+                cpu_futures = {cpu_executor.submit(parse_zip_worker, task): task[0] for task in worker_tasks}
                 for future in as_completed(cpu_futures):
                     res = future.result()
                     if isinstance(res, pd.DataFrame):
@@ -211,12 +237,12 @@ class GDELTRollingPipeline:
             if month_dfs:
                 full_month_df = pd.concat(month_dfs, ignore_index=True)
                 
-                # Optionnel : suppression des doublons stricts sur la clé primaire pour assainir la table
+                # Suppression des doublons basés sur la clé primaire de l'article GKG
                 full_month_df.drop_duplicates(subset=['GKGRECORDID'], inplace=True)
                 
-                # Écriture Parquet avec compression Snappy (très rapide à l'écriture/lecture)
+                # Écriture Parquet avec compression Snappy
                 full_month_df.to_parquet(parquet_filepath, index=False, compression='snappy')
-                print(f"  🟢 Fichier créé : {parquet_filename} ({len(full_month_df):,} articles).")
+                print(f"  🟢 Fichier créé : {parquet_filename} ({len(full_month_df):,} articles enregistrés).")
                 
                 del full_month_df
                 del month_dfs
@@ -232,18 +258,16 @@ class GDELTRollingPipeline:
                     pass
             print(f"  ✨ Zone tampon vidée.\n")
 
-        print("🏆 PIPELINE EXÉCUTÉ AVEC SUCCÈS ! TA BASE DE DONNÉES EST PRÊTE.")
+        print("🏆 PIPELINE EXÉCUTÉ AVEC SUCCÈS ! TA BASE DE DONNÉES UNIFIÉE EST PRÊTE.")
 
 if __name__ == "__main__":
-    # Utilisation des chemins relatifs locaux basés sur tes liens symboliques
     pipeline = GDELTRollingPipeline(
-        temp_dir='./gdelt_buffer_temp',    # Stockage éphémère (se vide toutes les quelques minutes)
-        final_dir='./gdelt_parquet_db',   # Redirigé vers tes 2.4 To libres via ton lien symbolique
-        net_workers=16,                   # 16 téléchargements simultanés (vitesse réseau optimale)
-        cpu_workers=64                    # 64 processus parallèles pour traiter la RAM à la chaîne
+        temp_dir='./gdelt_buffer_temp',    
+        final_dir='./gdelt_parquet_db',   
+        net_workers=16,                   
+        cpu_workers=64                    
     )
     
-    # Lancement sur la plage temporelle complète de ton choix
     pipeline.process_pipeline(
         start_date='2015-02-19',
         end_date='2026-06-16'

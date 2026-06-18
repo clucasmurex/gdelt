@@ -59,9 +59,10 @@ def get_or_create_source_id(source_name):
 def parse_zip_worker(zip_filepath):
     """
     Ouvre un ZIP local en mémoire de manière optimisée.
-    Ne charge que les colonnes réellement utilisées en aval, pour économiser
-    RAM et temps CPU (la colonne TranslationInfo a été retirée car jamais
-    utilisée par la suite du pipeline).
+    Ne charge que les colonnes réellement utilisées en aval.
+
+    NB : dans le schéma GKG 2.1, V2.1TRANSLATIONINFO est à l'index 25
+    (et non 26, qui correspond à V2.1EXTRASXML) — corrigé ici.
     """
     target_indices = [
         0,   # GKGRECORDID
@@ -74,6 +75,7 @@ def parse_zip_worker(zip_filepath):
         11,  # V1PERSONS
         13,  # V1ORGANIZATIONS
         15,  # V1.5TONE
+        25,  # V2.1TRANSLATIONINFO
     ]
 
     column_names = [
@@ -87,6 +89,7 @@ def parse_zip_worker(zip_filepath):
         "Persons",
         "Organizations",
         "Tone_Raw",
+        "TranslationInfo",
     ]
 
     try:
@@ -101,6 +104,13 @@ def parse_zip_worker(zip_filepath):
                     encoding='utf-8',
                     on_bad_lines='skip'
                 )
+
+                # Origine du fichier : standard (anglophone) ou translingue.
+                # Le nom de fichier GDELT pour la liste translation contient
+                # toujours ".translation." (ex: 20150218224500.translation.gkg.csv.zip)
+                is_translingual = 1 if '.translation.' in os.path.basename(zip_filepath) else 0
+                df['IsTranslingual'] = is_translingual
+                df['IsTranslingual'] = df['IsTranslingual'].astype('int8')
 
                 # --- OPTIMISATION DES TYPES PRIMITIFS ---
                 tone_split = df['Tone_Raw'].str.split(',', expand=False)
@@ -127,7 +137,7 @@ def parse_zip_worker(zip_filepath):
                 # casserait l'écriture Parquet dès le chunk suivant.
                 for col in ['GKGRECORDID', 'DATE', 'DocumentIdentifier',
                             'EnhancedThemes', 'EnhancedLocations',
-                            'Persons', 'Organizations']:
+                            'Persons', 'Organizations', 'TranslationInfo']:
                     df[col] = df[col].fillna('')
 
                 # SÉCURITÉ ANTI-DOUBLONS : nettoyage local immédiat pour chaque lot de 15 min
@@ -187,29 +197,43 @@ class GDELTRollingPipeline:
         load_source_dictionary()  # Chargement initial du JSON externe au démarrage
 
     def load_master_list(self):
-        """Récupère la liste officielle des fichiers existants sur GDELT et les
-        regroupe directement par mois (évite de refiltrer un set global à
-        chaque itération de la boucle principale)."""
-        print("📋 Chargement de la Master File List GDELT...")
-        master_url = "http://data.gdeltproject.org/gdeltv2/masterfilelist.txt"
+        """Récupère les listes officielles des fichiers existants sur GDELT —
+        la liste standard (sources anglophones) ET la liste translingue
+        (sources non-anglophones traduites) — et les regroupe directement
+        par mois (évite de refiltrer un set global à chaque itération de la
+        boucle principale)."""
+        print("📋 Chargement des Master File Lists GDELT (standard + translingue)...")
+        master_lists = [
+            ("standard", "http://data.gdeltproject.org/gdeltv2/masterfilelist.txt"),
+            ("translingue", "http://data.gdeltproject.org/gdeltv2/masterfilelist-translation.txt"),
+        ]
         total = 0
-        try:
-            req = urllib.request.Request(master_url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=30) as response:
-                for line in response:
-                    line_str = line.decode('utf-8').strip()
-                    if not line_str:
-                        continue
-                    url = line_str.split(' ')[-1]
-                    if 'gkg.csv.zip' in url:
-                        filename = url.split('/')[-1]
-                        month_key = filename[:6]  # YYYYMM
-                        self.urls_by_month[month_key].append(url)
-                        total += 1
-            print(f"✓ {total:,} fichiers GKG répertoriés, répartis sur {len(self.urls_by_month)} mois.")
-        except Exception as e:
-            print(f"💥 Erreur critique Master List (vérifiez votre connectivité réseau) : {e}")
+        any_success = False
+        for label, master_url in master_lists:
+            count_before = total
+            try:
+                req = urllib.request.Request(master_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=60) as response:
+                    for line in response:
+                        line_str = line.decode('utf-8').strip()
+                        if not line_str:
+                            continue
+                        url = line_str.split(' ')[-1]
+                        if 'gkg.csv.zip' in url:
+                            filename = url.split('/')[-1]
+                            month_key = filename[:6]  # YYYYMM
+                            self.urls_by_month[month_key].append(url)
+                            total += 1
+                any_success = True
+                print(f"  ✓ Liste {label} : {total - count_before:,} fichiers GKG.")
+            except Exception as e:
+                print(f"  ⚠️ Impossible de charger la liste {label} ({master_url}) : {e}")
+
+        if not any_success:
+            print("💥 Erreur critique : aucune des deux master lists n'a pu être chargée.")
             sys.exit(1)
+
+        print(f"✓ Total combiné : {total:,} fichiers GKG répartis sur {len(self.urls_by_month)} mois.")
 
     def generate_months_list(self, start_date, end_date):
         """Génère la liste des chaînes YYYYMM de manière robuste.
@@ -369,6 +393,6 @@ if __name__ == "__main__":
     )
 
     pipeline.process_pipeline(
-        start_date='2015-02-19',
-        end_date='2026-06-17'   # ⚠️ rappel : ceci traite TOUT le mois de avril 2015, pas seulement 3 jours
+        start_date='2015-02-01',
+        end_date='2026-06-17'   # ⚠️ rappel : ceci traite TOUT le mois de mars 2015, pas seulement 3 jours
     )

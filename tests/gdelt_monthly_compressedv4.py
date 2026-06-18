@@ -1,4 +1,4 @@
-# fileName: gdelt_weekly_pipeline.py
+# fileName: gdelt_monthly_pipeline.py
 import os
 import sys
 import shutil
@@ -6,13 +6,15 @@ import urllib.request
 import subprocess
 import zipfile
 import json
+import multiprocessing
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 from datetime import datetime, timedelta
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 
 # --- SYSTÈME DE DICTIONNAIRE GLOBAL DE SOURCES ---
-# Permet de remplacer les strings par des ID entiers de 4 octets
 SOURCE_DICT_PATH = "./gdelt_sources_mapping.json"
 source_to_id = {}
 id_to_source = {}
@@ -28,8 +30,10 @@ def load_source_dictionary():
                 id_to_source = {int(k): v for k, v in data.get("id_to_source", {}).items()}
                 if source_to_id:
                     next_source_id = max(int(v) for v in source_to_id.values()) + 1
-        except Exception as e:
-            print(f"⚠️ Impossible de charger le dictionnaire de sources : {e}")
+        except Exception:
+            source_to_id = {}
+            id_to_source = {}
+            next_source_id = 1
 
 def save_source_dictionary():
     global source_to_id, id_to_source
@@ -56,7 +60,7 @@ def get_or_create_source_id(source_name):
 def parse_zip_worker(args):
     """
     Ouvre un ZIP local en mémoire de manière ultra-optimisée.
-    Exclut GCAM et renvoie les noms de sources bruts pour encodage ultérieur.
+    Ajoute le flag de traduction translingue.
     """
     zip_filepath, is_translated = args
     
@@ -84,7 +88,7 @@ def parse_zip_worker(args):
         "EnhancedLocations",
         "Persons",
         "Organizations",
-        "Tone_Raw",
+        "Tone_Raw", 
         "TranslationInfo"
     ]
     
@@ -101,21 +105,21 @@ def parse_zip_worker(args):
                     on_bad_lines='skip'
                 )
                 
-                # Extraction et nettoyage rapide du Tone & WordCount
+                # Extraction & Typage optimisé (float16 / int32)
                 tone_split = df['Tone_Raw'].str.split(',', expand=False)
                 df['Tone'] = tone_split.str[0]
-                df['Tone'] = pd.to_numeric(df['Tone'], errors='coerce').fillna(0.0).astype('float32')
+                df['Tone'] = pd.to_numeric(df['Tone'], errors='coerce').fillna(0.0).astype('float16')
                 
                 df['WordCount'] = tone_split.str[6]
                 df['WordCount'] = pd.to_numeric(df['WordCount'], errors='coerce').fillna(0).astype('int32')
                 df.drop(columns=['Tone_Raw'], inplace=True)
                 
-                # Flag de traduction (0/1)
+                # Flag de traduction (0 = Anglais d'origine, 1 = Traduit)
                 df['translated'] = int(is_translated)
                 df['translated'] = df['translated'].astype('uint8')
                 
-                # Typage initial propre
                 df['SourceCollectionIdentifier'] = df['SourceCollectionIdentifier'].astype('category')
+                df.drop_duplicates(subset=['GKGRECORDID'], inplace=True)
                 
         return df
     except Exception:
@@ -144,12 +148,12 @@ def download_file_worker(url, temp_dir):
         return "TIMEOUT"
 
 class GDELTRollingPipeline:
-    def __init__(self, temp_dir, final_dir, net_workers=16, cpu_workers=64):
+    def __init__(self, temp_dir, final_dir, net_workers=24, cpu_workers=48):
         self.temp_dir = Path(temp_dir)
         self.final_dir = Path(final_dir)
         self.net_workers = net_workers
         self.cpu_workers = cpu_workers
-        self.valid_gkg_urls = {}
+        self.valid_gkg_urls = {} # URL -> is_translated (True/False)
         
         self.temp_dir.mkdir(exist_ok=True, parents=True)
         self.final_dir.mkdir(exist_ok=True, parents=True)
@@ -183,74 +187,51 @@ class GDELTRollingPipeline:
         trans_count = self._fetch_master_list(trans_url, is_translation_list=True)
         print(f"  ✓ {trans_count:,} fichiers GKG translingues identifiés.")
         
-        print(f"🎯 Total après dédoublonnage : {len(self.valid_gkg_urls):,} fichiers uniques.")
+        print(f"🎯 Total combiné après dédoublonnage strict : {len(self.valid_gkg_urls):,} fichiers uniques.")
 
-    def generate_weeks_list(self, start_date, end_date):
-        """Génère la liste des semaines au format YYYY-Www."""
+    def generate_months_list(self, start_date, end_date):
         start = datetime.strptime(start_date, '%Y-%m-%d')
         end = datetime.strptime(end_date, '%Y-%m-%d')
-        
-        weeks = set()
-        current = start
+        months = []
+        current = datetime(start.year, start.month, 1)
         while current <= end:
-            year, week_num, _ = current.isocalendar()
-            weeks.add(f"{year}-W{week_num:02d}")
-            current += timedelta(days=1)
-            
-        return sorted(list(weeks))
-
-    def get_urls_for_week(self, week_str):
-        """Filtre les URLs GDELT appartenant à une semaine ISO spécifique."""
-        year_str, week_num_str = week_str.split('-W')
-        week_num = int(week_num_str)
-        year = int(year_str)
-        
-        matching_urls = []
-        for url in self.valid_gkg_urls.keys():
-            filename = url.split('/')[-1]
-            # Format GDELT GKG : YYYYMMDDHHMMSS.gkg.csv.zip
-            date_part = filename.split('.')[0]
-            if len(date_part) >= 8:
-                try:
-                    file_date = datetime.strptime(date_part[:8], '%Y%m%d')
-                    f_year, f_week, _ = file_date.isocalendar()
-                    if f_year == year and f_week == week_num:
-                        matching_urls.append(url)
-                except ValueError:
-                    continue
-        return matching_urls
+            months.append(current.strftime('%Y%m'))
+            next_month_approx = current + timedelta(days=32)
+            current = datetime(next_month_approx.year, next_month_approx.month, 1)
+        return months
 
     def process_pipeline(self, start_date, end_date):
         self.load_master_lists()
-        weeks_to_process = self.generate_weeks_list(start_date, end_date)
+        months_to_process = self.generate_months_list(start_date, end_date)
         
-        print(f"\n🚀 ACTIVATION DU PIPELINE HEBDOMADAIRE (ZÉRO SATURATION RAM)")
+        print(f"\n🚀 PIPELINE MENSUEL MULTILINGUE ULTRA-PERFORMANT (48 CŒURS ENGAGÉS)")
         print(f"📂 Zone Tampon Éphémère : {self.temp_dir}")
         print(f"💾 Base Parquet Finale   : {self.final_dir}\n")
 
-        for idx, week_str in enumerate(weeks_to_process, 1):
-            parquet_filename = f"gdelt_{week_str}.parquet"
+        for idx, month_str in enumerate(months_to_process, 1):
+            parquet_filename = f"gdelt_{month_str[:4]}-{month_str[4:]}.parquet"
             parquet_filepath = self.final_dir / parquet_filename
             
             if parquet_filepath.exists():
-                print(f"⏭️  [{idx}/{len(weeks_to_process)}] Semaine {week_str} déjà convertie. Passé.")
+                print(f"⏭️  [{idx}/{len(months_to_process)}] Mois {month_str} déjà converti. Passé.")
                 continue
 
-            print(f"🔄 [{idx}/{len(weeks_to_process)}] Traitement de la semaine : {week_str}")
+            print(f"🔄 [{idx}/{len(months_to_process)}] Traitement du mois : {month_str}")
             
-            week_urls = self.get_urls_for_week(week_str)
-            total_files = len(week_urls)
+            month_urls = [url for url in self.valid_gkg_urls.keys() if url.split('/')[-1].startswith(month_str)]
+            month_urls = month_urls[:10]
+            total_files = len(month_urls)
             
             if total_files == 0:
-                print(f"  ⚠ Aucun fichier trouvé pour la semaine {week_str}.")
+                print(f"  ⚠ Aucun fichier pour le mois {month_str}.")
                 continue
 
-            # ÉTAPE 1 : Téléchargement hebdomadaire restreint (RAM & Disque préservés)
-            print(f"  📥 Téléchargement de {total_files} fichiers (.zip) en zone tampon...")
+            # ÉTAPE 1 : Téléchargement parallèle intensif
+            print(f"  📥 Téléchargement parallélisé de {total_files} fichiers (.zip) en zone tampon...")
             success, skipped, failed = 0, 0, 0
             
             with ThreadPoolExecutor(max_workers=self.net_workers) as net_executor:
-                futures = {net_executor.submit(download_file_worker, url, str(self.temp_dir)): url for url in week_urls}
+                futures = {net_executor.submit(download_file_worker, url, str(self.temp_dir)): url for url in month_urls}
                 for future in as_completed(futures):
                     status = future.result()
                     if status == "DOWNLOADED": success += 1
@@ -258,71 +239,112 @@ class GDELTRollingPipeline:
                     else: failed += 1
             print(f"  ✓ Fin téléchargement (Nouveaux: {success} | Présents: {skipped} | Échecs: {failed})")
 
-            # ÉTAPE 2 : Compilation multi-processus
-            print(f"  🗜️  Parsing sélectif (Sans GCAM) via {self.cpu_workers} cœurs...")
+            # ÉTAPE 2 & 3 : Extraction Parallèle Lourde (Spawn) & Écriture Vectorisée par Lots
+            print(f"  🗜️  Parsing parallèle (Mode Spawn) et Streaming haute performance...")
             
             worker_tasks = []
-            for url in week_urls:
+            for url in month_urls:
                 filename = url.split('/')[-1]
                 local_path = self.temp_dir / filename
                 if local_path.exists() and local_path.stat().st_size > 0:
                     is_translated = self.valid_gkg_urls[url]
                     worker_tasks.append((str(local_path), is_translated))
 
-            week_dfs = []
-            with ProcessPoolExecutor(max_workers=self.cpu_workers) as cpu_executor:
+            writer = None
+            schema = None
+            articles_comptes = 0
+            chunk_dfs = []
+            chunk_size_trigger = 200  # Lots de 200 pour maximiser les performances disque/RAM
+
+            # Sécurisation absolue via le contexte 'spawn'
+            ctx = multiprocessing.get_context('spawn')
+
+            with ProcessPoolExecutor(max_workers=self.cpu_workers, max_tasks_per_child=20, mp_context=ctx) as cpu_executor:
                 cpu_futures = {cpu_executor.submit(parse_zip_worker, task): task[0] for task in worker_tasks}
+                
                 for future in as_completed(cpu_futures):
                     res = future.result()
-                    if isinstance(res, pd.DataFrame):
-                        week_dfs.append(res)
+                    if isinstance(res, pd.DataFrame) and not res.empty:
+                        chunk_dfs.append(res)
+                        
+                    if len(chunk_dfs) >= chunk_size_trigger:
+                        batch_df = pd.concat(chunk_dfs, ignore_index=True)
+                        chunk_dfs.clear()
+                        
+                        unique_sources = batch_df['SourceCommonName'].dropna().unique()
+                        for src in unique_sources:
+                            get_or_create_source_id(src)
+                        
+                        batch_df['SourceCommonName_ID'] = batch_df['SourceCommonName'].map(source_to_id).fillna(0).astype('int32')
+                        batch_df.drop(columns=['SourceCommonName'], inplace=True)
+                        batch_df.drop_duplicates(subset=['GKGRECORDID'], inplace=True)
+                        
+                        table = pa.Table.from_pandas(batch_df, preserve_index=False)
+                        articles_comptes += len(batch_df)
+                        
+                        if writer is None:
+                            schema = table.schema
+                            writer = pq.ParquetWriter(
+                                parquet_filepath, schema, 
+                                compression='zstd', compression_level=12, 
+                                use_dictionary=True
+                            )
+                        
+                        writer.write_table(table)
+                        del batch_df
+                        del table
 
-            # ÉTAPE 3 : Mapping Integer des Sources et écriture finale
-            if week_dfs:
-                full_week_df = pd.concat(week_dfs, ignore_index=True)
-                full_week_df.drop_duplicates(subset=['GKGRECORDID'], inplace=True)
-                
-                # Application dynamique du dictionnaire d'entiers (économie drastique de RAM)
-                print("  🧠 Encodage numérique des sources (Mapping ID)...")
-                # On extrait les valeurs uniques pour enrichir le dictionnaire de manière séquentielle
-                unique_sources = full_week_df['SourceCommonName'].dropna().unique()
-                for src in unique_sources:
-                    get_or_create_source_id(src)
-                
-                # Remplacement des chaînes de caractères par les entiers correspondants
-                full_week_df['SourceCommonName_ID'] = full_week_df['SourceCommonName'].map(source_to_id).fillna(0).astype('int32')
-                full_week_df.drop(columns=['SourceCommonName'], inplace=True)
-                
-                # Sauvegarde immédiate sur disque du dictionnaire mis à jour
-                save_source_dictionary()
+                # Traitement du reliquat final
+                if chunk_dfs:
+                    batch_df = pd.concat(chunk_dfs, ignore_index=True)
+                    chunk_dfs.clear()
+                    
+                    unique_sources = batch_df['SourceCommonName'].dropna().unique()
+                    for src in unique_sources:
+                        get_or_create_source_id(src)
+                    
+                    batch_df['SourceCommonName_ID'] = batch_df['SourceCommonName'].map(source_to_id).fillna(0).astype('int32')
+                    batch_df.drop(columns=['SourceCommonName'], inplace=True)
+                    batch_df.drop_duplicates(subset=['GKGRECORDID'], inplace=True)
+                    
+                    table = pa.Table.from_pandas(batch_df, preserve_index=False)
+                    articles_comptes += len(batch_df)
+                    
+                    if writer is None:
+                        schema = table.schema
+                        writer = pq.ParquetWriter(parquet_filepath, schema, compression='zstd', compression_level=12, use_dictionary=True)
+                    
+                    writer.write_table(table)
+                    del batch_df
+                    del table
 
-                # Écriture Parquet avec compression ZSTD
-                full_week_df.to_parquet(parquet_filepath, index=False, compression='zstd')
-                print(f"  🟢 Fichier créé : {parquet_filename} ({len(full_week_df):,} articles enregistrés).")
-                
-                del full_week_df
-                del week_dfs
+            save_source_dictionary()
+
+            if writer is not None:
+                writer.close()
+                print(f"  🟢 Fichier unifié créé : {parquet_filename} ({articles_comptes:,} articles enregistrés).")
             else:
-                print(f"  ❌ Échec : Aucun article extrait pour la semaine {week_str}")
+                print(f"  ❌ Échec : Aucun article extrait pour le mois {month_str}")
 
-            # ÉTAPE 4 : Nettoyage immédiat
+            # ÉTAPE 4 : Purge immédiate de l'espace tampon
             print(f"  🧹 Libération de l'espace disque de la zone tampon...")
             for f in self.temp_dir.glob('*'):
                 try: os.remove(f)
                 except Exception: pass
             print(f"  ✨ Zone tampon vidée.\n")
 
-        print("🏆 PIPELINE EXÉCUTÉ AVEC SUCCÈS ! BASE HEBDOMADAIRE SÉCURISÉE.")
+        print("🏆 ENSEMBLE DES MOIS MULTILINGUES EXTRAITS AVEC SUCCÈS !")
 
 if __name__ == "__main__":
+    # N'oubliez pas d'initialiser ou de vider gdelt_sources_mapping.json s'il plante au démarrage !
     pipeline = GDELTRollingPipeline(
         temp_dir='./gdelt_buffer_temp',    
         final_dir='./gdelt_parquet_db',   
-        net_workers=16,                   
-        cpu_workers=64                    
+        net_workers=24,       
+        cpu_workers=48        # 48 cœurs actifs, 16 cœurs de secours pour l'équipe
     )
     
     pipeline.process_pipeline(
-        start_date='2015-02-19',
-        end_date='2015-06-30'
+        start_date='2015-03-19',
+        end_date='2015-03-28'
     )

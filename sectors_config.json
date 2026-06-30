@@ -1,0 +1,830 @@
+{
+  "_comment": "Dictionnaire des secteurs et sous-catégories GDELT GKG. Modifiez les thèmes (themes) et ajoutez/supprimez des catégories selon vos besoins.",
+  "sectors": {
+    "energy": {
+      "label": "Energy",
+      "categories": {
+        "fossil": {
+          "label": "Fossil",
+          "themes": [
+            "WB_511_COAL_FIRED_POWER",
+            "WB_512_GAS_FIRED_POWER",
+            "WB_513_OIL_FIRED_POWER",
+            "WB_1753_GAS_TO_POWER"
+          ]
+        },
+        "renewables": {
+          "label": "Renewables",
+          "themes": [
+            "ENV_WINDPOWER",
+            "WB_529_WIND_ENERGY",
+            "WB_527_HYDROPOWER",
+            "WB_1988_HYDROPOWER_TECHNOLOGIES",
+            "WB_1992_WAVE_POWER",
+            "WB_1989_STORAGE_HYDROPOWER",
+            "WB_1990_RUN_OF_RIVER_HYDROPOWER",
+            "WB_1991_OFF_GRID_HYDROPOWER"
+          ]
+        },
+        "nuclear": {
+          "label": "Nuclear",
+          "themes": [
+            "WB_509_NUCLEAR_ENERGY",
+            "ENV_NUCLEARPOWER"
+          ]
+        },
+        "regulation": {
+          "label": "Regulation, policies and law",
+          "themes": [
+            "WB_515_POWER_SECTOR_POLICY_AND_INSTITUTIONS",
+            "WB_1033_SOLAR_POWER_LAW_AND_REGULATION",
+            "WB_1871_HYDROPOWER_LAW_AND_REGULATION",
+            "WB_1034_WIND_POWER_LAW_AND_REGULATION",
+            "WB_1035_HYDROELECTRIC_POWER_LAW_AND_REGULATION"
+          ]
+        },
+        "infrastructures": {
+          "label": "Infrastructures",
+          "themes": [
+            "WB_508_POWER_SYSTEMS",
+            "WB_510_POWER_TRANSMISSION",
+            "WB_1703_POWER_DISTRIBUTION",
+            "ECON_NEWPOWERPLANT",
+            "WB_2277_INDEPENDENT_POWER_PROJECTS",
+            "WB_1704_POWER_SYSTEMS_PLANNING"
+          ]
+        },
+        "risks": {
+          "label": "Risks (blackout, outage)",
+          "themes": [
+            "POWER_OUTAGE",
+            "MANMADE_DISASTER_WITHOUT_POWER",
+            "MANMADE_DISASTER_POWER_OUTAGES",
+            "MANMADE_DISASTER_POWER_FAILURE",
+            "MANMADE_DISASTER_POWER_OUTAGE",
+            "MANMADE_DISASTER_RESTORE_POWER",
+            "MANMADE_DISASTER_DOWNED_POWER_LINES",
+            "MANMADE_DISASTER_KNOCKED_OUT_POWER",
+            "MANMADE_DISASTER_NUCLEAR_ACCIDENT",
+            "MANMADE_DISASTER_POWER_FAILURES",
+            "MANMADE_DISASTER_POWER_WAS_RESTORED",
+            "MANMADE_DISASTER_DOWNED_POWER_LINE",
+            "MANMADE_DISASTER_POWER_BLACKOUT",
+            "MANMADE_DISASTER_POWER_DISRUPTION",
+            "MANMADE_DISASTER_DOWNED_POWERLINES",
+            "MANMADE_DISASTER_DISRUPTION_OF_POWER",
+            "MANMADE_DISASTER_DOWNED_POWERLINE",
+            "MANMADE_DISASTER_POWER_WONT_BE_RESTORED",
+            "MANMADE_DISASTER_POWER_NOT_RESTORED"
+          ]
+        }
+      }
+    },
+    "finance": {
+      "label": "Finance",
+      "categories": {
+        "central_banks": {
+          "label": "Central banks and monetary policy",
+          "themes": [
+            "ECON_CENTRALBANK",
+            "ECON_INTEREST_RATES",
+            "ECON_INFLATION",
+            "WB_1235_CENTRAL_BANKS",
+            "WB_442_INFLATION",
+            "WB_444_MONETARY_POLICY",
+            "WB_1125_INTEREST_RATE_POLICY",
+            "WB_1108_MONETARY_ANALYSIS",
+            "WB_1127_RESERVE_RATES",
+            "EPU_POLICY_CENTRAL_BANK",
+            "EPU_POLICY_INTEREST_RATES",
+            "EPU_POLICY_INTEREST_RATE",
+            "EPU_POLICY_MONETARY_POLICY",
+            "EPU_POLICY_BANK_OF_JAPAN",
+            "EPU_POLICY_PEOPLE_BANK_OF_CHINA",
+            "EPU_POLICY_BANK_OF_KOREA",
+            "EPU_POLICY_PEOPLES_BANK_OF_CHINA",
+            "EPU_POLICY_FEDERAL_RESERVE",
+            "EPU_CATS_MONETARY_POLICY"
+          ]
+        },
+        "sovereign_debt": {
+          "label": "Sovereign debt",
+          "themes": [
+            "EPU_CATS_SOVEREIGN_DEBT_CURRENCY_CRISES",
+            "ECON_SOVEREIGN_DEBT",
+            "WB_452_DEBT_RELIEF",
+            "WB_453_HEAVILY_INDEBTED_POOR_COUNTRIES",
+            "WB_1139_DEBT_SUSTAINABILITY_FRAMEWORK",
+            "WB_1138_MULTILATERAL_DEBT_RELIEF_INITIATIVE",
+            "WB_1107_MEDIUM_TERM_DEBT_MANAGEMENT_STRATEGY",
+            "WB_1129_SOVEREIGN_ASSET_MANAGEMENT",
+            "WB_1137_DEBT_MANAGEMENT_REFORM_PLANS",
+            "WB_1105_DEBT_MANAGEMENT_PERFORMANCE_ASSESSMENTS",
+            "WB_457_SUBNATIONAL_DEBT_AND_FINANCE",
+            "WB_1104_MACROECONOMIC_VULNERABILITY_AND_DEBT",
+            "WB_454_DEBT_RESTRUCTURING",
+            "WB_713_PUBLIC_FINANCE",
+            "WB_716_MANAGING_PUBLIC_FINANCES",
+            "WB_1684_POLICY_FINANCING",
+            "WB_2118_PUBLIC_FINANCIAL_ANALYSIS"
+          ]
+        },
+        "private_debt": {
+          "label": "Private debt",
+          "themes": [
+            "ECON_DEBT",
+            "WB_450_DEBT",
+            "WB_411_DEBT_RESOLUTION",
+            "WB_451_DEBT_MANAGEMENT",
+            "WB_455_COMMERCIAL_DEBT_REDUCTION"
+          ]
+        },
+        "banks": {
+          "label": "Banks and non-bank institutions",
+          "themes": [
+            "ECON_FOREIGNBANKS",
+            "WB_318_FINANCIAL_ARCHITECTURE_AND_BANKING",
+            "WB_1920_FINANCIAL_SECTOR_DEVELOPMENT",
+            "WB_1234_BANKING_INSTITUTIONS",
+            "WB_336_NON_BANK_FINANCIAL_INSTITUTIONS",
+            "WB_1236_COMMERCIAL_BANKING",
+            "WB_371_BRANCHLESS_BANKING",
+            "WB_1254_INTERNET_BANKING",
+            "WB_1252_MOBILE_BANKING",
+            "WB_1237_MERCHANT_BANKS",
+            "WB_1253_AGENT_BANKING",
+            "WB_372_FINANCIAL_COOPERATIVES",
+            "WB_2196_FINANCIAL_INTERMEDIARIES",
+            "TAX_FNCACT_BANK_COMMISSIONER",
+            "TAX_FNCACT_BANK_COMMISSIONERS",
+            "TAX_FNCACT_BANKER",
+            "TAX_FNCACT_INVESTMENT_BANKER",
+            "WB_877_ASSET_MANAGEMENT",
+            "WB_1748_DEBT_FUNDS"
+          ]
+        },
+        "systemic_risk": {
+          "label": "Systemic risk and stability",
+          "themes": [
+            "ECON_BANKRUPTCY",
+            "EPU_CATS_DEBT_CEILING_GOV_SHUTDOWN",
+            "WB_1973_FINANCIAL_RISK_REDUCTION",
+            "WB_1245_FINANCIAL_VULNERABILITY_AND_RISKS",
+            "WB_1277_BANKRUPTCY_AND_LIQUIDATION",
+            "WB_1098_MONETARY_AND_FINANCIAL_STABILITY",
+            "WB_1142_FINANCIAL_SECTOR_INSTABILITY",
+            "WB_321_FINANCIAL_CRISIS_PREPAREDNESS",
+            "WB_1165_POVERTY_AND_FISCAL_FINANCIAL_AND_ECONOMIC_CRISIS",
+            "WB_328_FINANCIAL_INTEGRITY"
+          ]
+        },
+        "credit": {
+          "label": "Credit",
+          "themes": [
+            "CLAIM_CREDIT",
+            "EPU_POLICY_CREDIT_CRUNCH",
+            "WB_382_TAX_CREDITS_AND_DIRECT_SUBSIDIES",
+            "WB_1256_CREDIT_UNIONS",
+            "WB_357_CREDIT_REPORTING",
+            "WB_1764_MICRO_CREDIT",
+            "WB_1962_AGRICULTURAL_CREDIT",
+            "WB_1667_LOAN_BASED_PROGRAMS",
+            "TAX_FNCACT_LOAN_COUNSELOR",
+            "TAX_FNCACT_LOAN_OFFICER",
+            "TAX_FNCACT_MORTGAGE_LOAN_OFFICER"
+          ]
+        },
+        "regulation": {
+          "label": "Regulation, law and policies",
+          "themes": [
+            "WB_846_INSOLVENCY_AND_DEBTOR_CREDITOR_LAW",
+            "WB_1894_EFFECTIVE_INSOLVENCY_AND_CREDITOR_RIGHTS_SYSTEMS",
+            "EPU_CATS_FINANCIAL_REGULATION",
+            "TAX_FNCACT_FINANCE_MINISTER",
+            "TAX_FNCACT_MINISTER_OF_FINANCE",
+            "TAX_FNCACT_MINISTER_OF_FINANCES",
+            "TAX_FNCACT_FINANCE_MINISTERS",
+            "TAX_FNCACT_FINANCE_OFFICER",
+            "WB_853_FINANCIAL_LAWS_AND_REGULATIONS",
+            "WB_317_BANK_REGULATION_AND_SUPERVISION",
+            "WB_2081_FINANCIAL_DISCLOSURE",
+            "WB_2073_ILLICIT_FINANCIAL_FLOWS",
+            "WB_971_BANKING_REGULATION",
+            "WB_312_INTERNATIONAL_FINANCIAL_STANDARDS",
+            "WB_1241_BANK_CAPITAL_ADEQUACY",
+            "WB_2459_ILLICIT_FINANCIAL_FLOWS",
+            "WB_1232_PRINCIPLES_OF_CORPORATE_GOVERNANCE",
+            "WB_1243_BANK_INTERNAL_CONTROLS",
+            "WB_1257_CORE_PRINCIPLES_FOR_EFFECTIVE_BANKING_SUPERVISION",
+            "WB_1124_EXCHANGE_RATE_POLICY"
+          ]
+        },
+        "international_orgs": {
+          "label": "International organizations",
+          "themes": [
+            "TAX_AIDGROUPS_ASIAN_DEVELOPMENT_BANK",
+            "TAX_AIDGROUPS_INTERNATIONAL_FINANCE_CORPORATION",
+            "TAX_AIDGROUPS_AFRICAN_DEVELOPMENT_BANK_GROUP",
+            "ECON_DEVELOPMENTORGS_INTERNATIONAL_MONETARY_FUND",
+            "ECON_DEVELOPMENTORGS_WORLD_BANK",
+            "ECON_DEVELOPMENTORGS_ASIAN_DEVELOPMENT_BANK",
+            "ECON_DEVELOPMENTORGS_AFRICAN_DEVELOPMENT_BANK",
+            "ECON_DEVELOPMENTORGS_WORLD_BANK_GROUP",
+            "ECON_DEVELOPMENTORGS_CENTRAL_AMERICAN_BANK",
+            "ECON_DEVELOPMENTORGS_ISLAMIC_DEVELOPMENT_BANK",
+            "ECON_DEVELOPMENTORGS_INTERNATIONAL_FINANCE_CORPORATION",
+            "ECON_DEVELOPMENTORGS_ASIAN_INFRASTRUCTURE_INVESTMENT_BANK",
+            "ECON_DEVELOPMENTORGS_INTERAMERICAN_DEVELOPMENT_BANK",
+            "ECON_DEVELOPMENTORGS_JAPAN_BANK_FOR_INTERNATIONAL_COOPERATION",
+            "ECON_DEVELOPMENTORGS_ARAB_MONETARY_FUND",
+            "ECON_DEVELOPMENTORGS_INTER_AMERICAN_DEVELOPMENT_BANK",
+            "ECON_DEVELOPMENTORGS_COUNCIL_OF_EUROPE_DEVELOPMENT_BANK",
+            "ECON_DEVELOPMENTORGS_EUROPEAN_DEVELOPMENT_BANK"
+          ]
+        },
+        "financial_markets": {
+          "label": "Financial markets",
+          "themes": [
+            "WB_332_CAPITAL_MARKETS",
+            "WB_1918_SECURITIES_MARKETS",
+            "WB_334_EQUITY_MARKETS",
+            "WB_333_NON_GOVERNMENT_BOND_MARKETS",
+            "WB_335_GOVERNMENT_BOND_MARKETS",
+            "ECON_STOCKMARKET",
+            "WB_370_TRADE_FINANCE"
+          ]
+        }
+      }
+    },
+    "real_estate": {
+      "label": "Real Estate",
+      "categories": {
+        "regulation": {
+          "label": "Law, policies and regulation",
+          "themes": [
+            "PROPERTY_RIGHTS",
+            "WB_1039_PROPERTY_LAWS_AND_REGULATIONS",
+            "WB_888_LAND_TENURE",
+            "WB_964_PROPERTY_AND_LAND_LAW",
+            "WB_890_CADASTRE_AND_LAND_REGISTRATION",
+            "WB_891_LAND_REFORM",
+            "WB_972_CONSTRUCTION_LAW_AND_PERMITS",
+            "WB_1722_HOUSING_POLICY_AND_INSTITUTIONS",
+            "WB_2287_LAND_USE_LAWS",
+            "WB_1910_LAND_REGISTRIES",
+            "WB_2288_LAND_ACQUISITION_LAWS",
+            "WB_869_HOUSING_LAWS_AND_REGULATIONS"
+          ]
+        },
+        "urbanism": {
+          "label": "Urbanism",
+          "themes": [
+            "URBAN",
+            "WB_699_URBAN_DEVELOPMENT",
+            "WB_813_URBAN_GOVERNANCE_AND_CITY_SYSTEMS",
+            "WB_797_NATIONAL_URBAN_POLICIES",
+            "WB_862_GROWTH_POLES_AND_ECONOMIC_ZONES",
+            "WB_1202_INDUSTRIAL_ZONES",
+            "WB_1721_SPATIAL_PLANNING_AND_LAND_USE",
+            "WB_788_URBAN_TRANSPORT",
+            "WB_816_STRATEGIC_URBAN_PLANNING",
+            "WB_1835_URBAN_REGENERATION",
+            "WB_1016_SPECIAL_ECONOMIC_ZONES",
+            "URBAN_SPRAWL",
+            "WB_785_URBAN_ROADS",
+            "WB_1728_URBAN_TRANSPORT_POLICY_AND_PLANNING",
+            "WB_1836_URBANIZATION_REVIEWS",
+            "WB_2963_MUNICIPAL_LAND_MANAGEMENT",
+            "WB_1203_SERVICE_SECTOR_ZONES"
+          ]
+        },
+        "financing": {
+          "label": "Financing",
+          "themes": [
+            "WB_612_HOUSING_FINANCE",
+            "WB_871_HOUSING_SUBSIDIES",
+            "WB_1594_HOUSING_ALLOWANCE",
+            "TAX_FNCACT_MORTGAGE_LOAN_OFFICER",
+            "WB_1190_WAREHOUSE_FINANCE",
+            "WB_414_PRIVATE_PARTICIPATION_IN_INFRASTRUCTURE",
+            "WB_1912_MORTGAGE_REGISTRIES",
+            "WB_2185_MICRO_HOUSING_FINANCE",
+            "WB_2184_HOUSING_FINANCE_FOR_THE_POOR",
+            "WB_2780_PROPERTY_TAX_ABATEMENT"
+          ]
+        },
+        "market": {
+          "label": "Real estate market",
+          "themes": [
+            "ECON_HOUSING_PRICES",
+            "WB_817_LAND_AND_HOUSING",
+            "WB_904_HOUSING_MARKETS",
+            "TAX_FNCACT_LANDLORD",
+            "TAX_FNCACT_LANDLORDS",
+            "WB_2186_SOCIAL_HOUSING",
+            "WB_2187_RENTAL_HOUSING",
+            "TAX_FNCACT_PROPERTY_MANAGER",
+            "TAX_FNCACT_LANDLADY",
+            "TAX_FNCACT_ESTATE_MANAGER",
+            "WB_2188_AFFORDABLE_HOUSING_SUPPLY",
+            "TAX_FNCACT_LAND_AGENT",
+            "TAX_FNCACT_LAND_AGENTS"
+          ]
+        },
+        "construction": {
+          "label": "Construction",
+          "themes": [
+            "NEW_CONSTRUCTION",
+            "TAX_FNCACT_BUILDER",
+            "WB_870_HOUSING_CONSTRUCTION",
+            "TAX_FNCACT_CONSTRUCTION_WORKER",
+            "TAX_FNCACT_REAL_ESTATE_DEVELOPER",
+            "WB_408_GREEN_BUILDINGS",
+            "TAX_FNCACT_MASTER_BUILDER",
+            "WB_823_POST_DISASTER_RECOVERY_AND_RECONSTRUCTION",
+            "WB_2480_POST_CONFLICT_RECONSTRUCTION",
+            "TAX_FNCACT_LANDSCAPER"
+          ]
+        }
+      }
+    },
+    "industry": {
+      "label": "Manufacturing / Industry",
+      "categories": {
+        "regulation": {
+          "label": "Policy, law and regulation",
+          "themes": [
+            "WB_818_INDUSTRY_POLICY_AND_REAL_SECTORS",
+            "WB_1747_PRODUCT_MARKET_REGULATION_AND_COMPETITION_ADVOCACY",
+            "WB_1075_INDUSTRY_POLICY",
+            "WB_970_INDUSTRY_LAWS_AND_REGULATIONS",
+            "WB_2847_INDUSTRIAL_POLICIES",
+            "ECON_DEVELOPMENTORGS_UNITED_NATIONS_INDUSTRIAL_DEVELOPMENT_ORGANIZATION",
+            "TAX_AIDGROUPS_UNITED_NATIONS_INDUSTRIAL_DEVELOPMENT_ORGANIZATION",
+            "ECON_DEVELOPMENTORGS_UNITED_NATIONS_INDUSTRIAL_DEVELOPMENT_ORGANISATION",
+            "WB_3004_INFANT_INDUSTRY_PROTECTION",
+            "WB_2630_MANUFACTURING_SECTOR_STRATEGY",
+            "WB_1133_PRODUCTIVITY_ENHANCING_POLICY"
+          ]
+        },
+        "factories": {
+          "label": "Factories infrastructure and workers",
+          "themes": [
+            "WB_1281_MANUFACTURING",
+            "TAX_FNCACT_MANUFACTURER",
+            "TAX_FNCACT_INDUSTRIALIST",
+            "WB_1202_INDUSTRIAL_ZONES",
+            "TECH_AUTOMATION",
+            "TAX_FNCACT_INDUSTRIALISTS",
+            "TAX_FNCACT_FACTORY_WORKERS",
+            "TAX_FNCACT_FACTORY_WORKER",
+            "TAX_FNCACT_INDUSTRIAL_ENGINEER",
+            "TAX_FNCACT_INDUSTRIAL_DESIGNER",
+            "WB_2417_DIGITAL_MANUFACTURING",
+            "WB_2641_GREEN_INDUSTRIAL_ZONES"
+          ]
+        },
+        "productivity": {
+          "label": "Productivity",
+          "themes": [
+            "WB_2756_LABOR_PRODUCTIVITY",
+            "WB_2751_LABOR_SUPPLY",
+            "WB_2752_ELASTICITY_OF_LABOR_SUPPLY",
+            "WB_2688_PRODUCTION_FRONTIER"
+          ]
+        },
+        "supply_chains": {
+          "label": "Supply chains and inputs",
+          "themes": [
+            "TAX_FNCACT_PRODUCER",
+            "WB_1226_INDUSTRIAL_CLUSTERS_AND_VALUE_CHAINS",
+            "WB_3002_INDUSTRY_CLUSTER",
+            "WB_3005_FACTORY_FARM",
+            "WB_2605_SUPPLY_CHAIN_ANALYSIS",
+            "WB_1182_CROSS_BORDER_SUPPLY"
+          ]
+        },
+        "logistics": {
+          "label": "Logistic and storage",
+          "themes": [
+            "WB_2566_EXPORT_PROMOTION",
+            "WB_2615_DIVERSIFICATION_OF_PRODUCTION_AND_EXPORTS",
+            "WB_1200_EXPORT_ZONES",
+            "WB_2626_WAREHOUSE_RECEIPTS",
+            "WB_1190_WAREHOUSE_FINANCE",
+            "WB_2616_QUALITY_AND_SOPHISTICATION_ANALYSIS_OF_EXPORTS",
+            "WB_2614_EXPORT_GROWTH_DETERMINANTS_AND_DYNAMICS"
+          ]
+        },
+        "risks": {
+          "label": "Risks",
+          "themes": [
+            "EMERG_INDUSTRIALACCIDENT",
+            "MANMADE_DISASTER_INDUSTRIAL_ACCIDENT",
+            "WB_2967_INDUSTRIAL_POLLUTION",
+            "MANMADE_DISASTER_INDUSTRIAL_DISASTER",
+            "MANMADE_DISASTER_INDUSTRIAL_CATASTROPHE"
+          ]
+        }
+      }
+    },
+    "agriculture": {
+      "label": "Agriculture",
+      "categories": {
+        "regulation": {
+          "label": "Regulation, policies and law",
+          "themes": [
+            "WB_170_AGRICULTURAL_POLICIES",
+            "WB_171_AGRICULTURAL_LAWS_AND_REGULATIONS",
+            "ECON_PRICECONTROL",
+            "WB_1052_FOOD_SAFETY_STANDARDS_AUDITS_AND_CERTIFICATION",
+            "WB_2107_PRICE_CONTROLS",
+            "WB_1978_AGRICULTURE_AND_RELATED_SUBSIDIES",
+            "WB_1963_RESPONSIBLE_AGRICULTURAL_INVESTMENT"
+          ]
+        },
+        "climate_risks": {
+          "label": "Climate and risks",
+          "themes": [
+            "WB_1967_AGRICULTURAL_RISK_AND_SECURITY",
+            "WB_1949_CLIMATE_SMART_AGRICULTURE",
+            "TAX_PLANTDISEASE",
+            "TAX_PLANTDISEASE_POWDERY_MILDEW",
+            "TAX_PLANTDISEASE_FUNGAL_DISEASE",
+            "TAX_PLANTDISEASE_VIRAL_DISEASE",
+            "TAX_PLANTDISEASE_BACTERIAL_DISEASE",
+            "TAX_PLANTDISEASE_LEAF_SPOT",
+            "TAX_PLANTDISEASE_FUNGAL_DISEASES",
+            "WB_1972_POST_HARVEST_LOSSES",
+            "TAX_PLANTDISEASE_PLANT_DISEASE",
+            "TAX_PLANTDISEASE_ROOT_ROT",
+            "TAX_PLANTDISEASE_DOWNY_MILDEW",
+            "TAX_PLANTDISEASE_VIRAL_DISEASES",
+            "TAX_PLANTDISEASE_LATE_BLIGHT",
+            "TAX_PLANTDISEASE_WHEAT_RUST",
+            "WB_2189_AGRICULTURE_INSURANCE"
+          ]
+        },
+        "water": {
+          "label": "Water management and irrigation",
+          "themes": [
+            "WB_140_AGRICULTURAL_WATER_MANAGEMENT",
+            "WB_151_IRRIGATION_AND_DRAINAGE",
+            "WB_989_IRRIGATION_AND_DRAINAGE_CANALS",
+            "WB_992_IRRIGATION_METHODS",
+            "WB_1006_GRAVITY_IRRIGATION",
+            "WB_995_IRRIGATION_AND_DRAINAGE_OPERATION_AND_MAINTENANCE",
+            "WB_1007_PRESSURIZED_IRRIGATION",
+            "WB_997_IRRIGATION_AND_DRAINAGE_MODERNIZATION_AND_REHABILITATION",
+            "WB_1002_IRRIGATION_WATER_QUALITY",
+            "WB_2976_AGRICULTURAL_CANALS",
+            "WB_795_IRRIGATION_AGRONOMY",
+            "WB_998_PARTICIPATORY_IRRIGATION_AND_DRAINAGE_MANAGEMENT"
+          ]
+        },
+        "infrastructure_tech": {
+          "label": "Infrastructures, inputs and technology",
+          "themes": [
+            "WB_175_FERTILIZERS",
+            "WB_1950_AGRICULTURE_TECHNOLOGY",
+            "WB_197_AGRICULTURAL_RESEARCH",
+            "WB_1968_CROP_SELECTION_AND_PRODUCTION",
+            "WB_1960_FARM_INPUTS",
+            "WB_1980_AGRO_FORESTRY",
+            "WB_1009_AGRICULTURE_EXTENSION",
+            "WB_1966_AGRO_PROCESSING",
+            "WB_196_AGRICULTURAL_INNOVATION_SYSTEMS",
+            "WB_152_RAINFED_AGRICULTURE",
+            "WB_1971_ON_FARM_STORAGE",
+            "WB_198_ICT_AND_AGRICULTURE"
+          ]
+        },
+        "agribusiness": {
+          "label": "Agribusiness and markets",
+          "themes": [
+            "AGRICULTURE",
+            "WB_174_CROP_PRODUCTION",
+            "WB_2179_AGRIBUSINESS",
+            "WB_1058_AGRIBUSINESS",
+            "WB_1959_LINKING_FARMERS_WITH_MARKETS",
+            "WB_2559_FOOD_TRADE",
+            "WB_1059_AGRICULTURAL_FINANCE",
+            "WB_192_AGRICULTURAL_TRADE",
+            "WB_194_AGRICULTURAL_SUPPLY_CHAIN",
+            "WB_2987_AGRIBUSINESS_DEVELOPMENT",
+            "WB_2628_AGRICULTURE_SUPPLY_CHAINS",
+            "WB_2986_AGRIBUSINESS_MANAGEMENT",
+            "TAX_FNCACT_GRAIN_BROKER",
+            "WB_1187_STRUCTURED_TRADE_COMMODITY_FINANCE"
+          ]
+        },
+        "rural_labor": {
+          "label": "Rural development and labor",
+          "themes": [
+            "RURAL",
+            "TAX_FNCACT_FARMERS",
+            "TAX_FNCACT_FARMER",
+            "WB_2667_RURAL_DEVELOPMENT",
+            "TAX_FNCACT_AGRONOMIST",
+            "TAX_FNCACT_FARM_WORKERS",
+            "TAX_FNCACT_DAIRY_FARMER",
+            "TAX_FNCACT_FARMWORKER",
+            "WB_1877_RURAL_ELECTRIFICATION",
+            "WB_191_RURAL_FINANCE",
+            "WB_2849_JOBS_IN_AGRICULTURE",
+            "WB_2696_AGRICULTURAL_EMPLOYMENT"
+          ]
+        },
+        "food_prices": {
+          "label": "Food staples and prices",
+          "themes": [
+            "TAX_ECON_PRICE",
+            "TAX_FOODSTAPLES",
+            "TAX_FOODSTAPLES_MEAT",
+            "TAX_FOODSTAPLES_RICE",
+            "TAX_FOODSTAPLES_MILK",
+            "TAX_FOODSTAPLES_BREAD",
+            "TAX_FOODSTAPLES_EGGS",
+            "TAX_FOODSTAPLES_GRAIN",
+            "TAX_FOODSTAPLES_WHEAT",
+            "TAX_FOODSTAPLES_CORN",
+            "TAX_FOODSTAPLES_POTATOES",
+            "TAX_FOODSTAPLES_MAIZE",
+            "TAX_FOODSTAPLES_SOYBEAN",
+            "TAX_FOODSTAPLES_CEREALS",
+            "TAX_FOODSTAPLES_BARLEY",
+            "WB_200_FOOD_PRICE_ANALYSIS",
+            "WB_1164_COMMODITY_PRICES_SHOCKS"
+          ]
+        }
+      }
+    },
+    "tech": {
+      "label": "Tech",
+      "categories": {
+        "regulation": {
+          "label": "Regulation, policies and law",
+          "themes": [
+            "WB_680_PERSONAL_DATA_PROTECTION",
+            "WB_2369_DATA_PRIVACY",
+            "WB_2350_ICT_INNOVATION_POLICY",
+            "WB_378_INNOVATION_AND_TECHNOLOGY_POLICY",
+            "WB_679_OPEN_DATA_POLICY"
+          ]
+        },
+        "gov_strategy": {
+          "label": "Government strategy",
+          "themes": [
+            "WB_678_DIGITAL_GOVERNMENT",
+            "WB_2345_DIGITAL_ECONOMY_STRATEGY",
+            "WB_2012_GOVERNMENT_DATA_CENTRES"
+          ]
+        },
+        "infrastructure": {
+          "label": "Infrastructures and hardware",
+          "themes": [
+            "WB_133_INFORMATION_AND_COMMUNICATION_TECHNOLOGIES",
+            "SOC_TECHNOLOGYSECTOR",
+            "TECH_SUPERCOMPUTING",
+            "WB_2377_TECHNOLOGY_ARCHITECTURE",
+            "WB_2123_CORPORATE_DATA_NETWORKS",
+            "WB_692_INFORMATION_TECHNOLOGY_PARKS_AND_ZONES"
+          ]
+        },
+        "software": {
+          "label": "Software",
+          "themes": [
+            "WB_669_SOFTWARE_INFRASTRUCTURE",
+            "WB_2945_DATABASE",
+            "TECH_BIGDATA",
+            "WB_661_BIG_DATA",
+            "WB_676_CLOUD_COMPUTING",
+            "WB_2381_SOFTWARE_DEVELOPMENT",
+            "WB_665_SOFTWARE_AS_A_SERVICE",
+            "WB_2382_AGILE_SOFTWARE_DEVELOPMENT",
+            "WB_2385_DATA_CATALOGUES",
+            "WB_2366_SPATIAL_DATA_INFRASTRUCTURE"
+          ]
+        },
+        "risks": {
+          "label": "Risks",
+          "themes": [
+            "WB_2370_DATA_SECURITY",
+            "CYBER_ATTACK",
+            "WB_2457_CYBER_CRIME"
+          ]
+        },
+        "innovation": {
+          "label": "Innovation and entrepreneurship",
+          "themes": [
+            "SOC_INNOVATION",
+            "SOC_EMERGINGTECH",
+            "WB_376_INNOVATION_TECHNOLOGY_AND_ENTREPRENEURSHIP",
+            "WB_377_FIRM_INNOVATION_PRODUCTIVITY_AND_GROWTH",
+            "TECH_AUTOMATION",
+            "WB_380_FUNDING_INNOVATION",
+            "TECH_VIRTUALREALITY",
+            "WB_2399_ICT_INNOVATION_AND_TRANSFORMATION",
+            "WB_1084_TECHNOLOGY_TRANSFER_AND_DIFFUSION",
+            "WB_2401_ICT_INNOVATION_METHODOLOGIES",
+            "WB_1944_INNOVATION_AND_PRODUCTIVITY_GROWTH",
+            "WB_1945_KNOWLEDGE_BASED_CAPITAL_FOR_INNOVATION",
+            "WB_1278_BUSINESS_ENTRY_AND_STARTUP",
+            "WB_1275_INNOVATION_COLLABORATION",
+            "WB_400_INNOVATION_DRIVEN_INCLUSIVE_GROWTH",
+            "WB_1274_TECHNOLOGY_TRANSFER_OFFICES",
+            "WB_1724_INNOVATIVE_CITIES",
+            "WB_399_INNOVATION_FOR_GREEN_GROWTH",
+            "WB_394_TECHNOLOGY_EXTENSION_SERVICES",
+            "WB_689_SCIENCE_TECHNOLOGY_AND_INNOVATION"
+          ]
+        }
+      }
+    },
+    "transport": {
+      "label": "Transport and logistics",
+      "categories": {
+        "modes": {
+          "label": "Transport modes",
+          "themes": [
+            "WB_135_TRANSPORT",
+            "PUBLIC_TRANSPORT",
+            "TRAFFIC",
+            "WB_164_MODES_OF_TRANSPORT",
+            "WB_165_AIR_TRANSPORT",
+            "TAX_FNCACT_TRUCK_DRIVER",
+            "WB_1801_ROAD_TRANSPORT",
+            "WB_788_URBAN_TRANSPORT",
+            "TAX_FNCACT_TRUCKERS",
+            "WB_1800_RAIL_TRANSPORT",
+            "TAX_FNCACT_TRUCKER",
+            "WB_1812_TRANSPORT_EQUIPMENT",
+            "WB_1941_WATERBORNE_TRANSPORT",
+            "WB_787_NON_MOTORIZED_TRANSPORT",
+            "WB_1799_MARINE_TRANSPORT",
+            "WB_789_RURAL_TRANSPORT",
+            "WB_1802_MULTIMODAL_TRANSPORT",
+            "WB_536_ENERGY_EFFICIENT_TRANSPORT",
+            "WB_163_LOW_EMISSIONS_TRANSPORT"
+          ]
+        },
+        "infrastructure": {
+          "label": "Infrastructures",
+          "themes": [
+            "WB_1803_TRANSPORT_INFRASTRUCTURE",
+            "UNGP_TRANSPORTATION_ROADS",
+            "WB_865_TRADE_CORRIDORS",
+            "WB_514_REGIONAL_AND_CROSS_BORDER_INFRASTRUCTURE"
+          ]
+        },
+        "logistics": {
+          "label": "Logistics and supply chain",
+          "themes": [
+            "CRISLEX_C04_LOGISTICS_TRANSPORT",
+            "WB_793_TRANSPORT_AND_LOGISTICS_SERVICES",
+            "WB_794_FREIGHT_SERVICES",
+            "WB_1173_TRANSPORT_LOGISTICS_PROVIDERS",
+            "WB_2393_POSTAL_EXPRESS_COURIER_SERVICES_AND_LOGISTICS",
+            "WB_1182_CROSS_BORDER_SUPPLY",
+            "WB_2605_SUPPLY_CHAIN_ANALYSIS",
+            "WB_1172_TRANSPORT_INTEGRATORS"
+          ]
+        },
+        "regulation": {
+          "label": "Policies, law and regulation",
+          "themes": [
+            "WB_162_TRANSPORT_ECONOMICS",
+            "WB_1810_TRAFFIC_CONTROL_AND_MONITORING",
+            "WB_976_TRANSPORT_LAW_AND_REGULATION",
+            "WB_1823_TRANSPORT_GOVERNANCE",
+            "WB_1826_TRANSPORT_POLICY",
+            "WB_1825_TRANSPORT_INSTITUTIONS",
+            "WB_1728_URBAN_TRANSPORT_POLICY_AND_PLANNING",
+            "WB_1827_RURAL_TRANSPORT_POLICY_AND_PLANNING",
+            "WB_775_TRADE_POLICY_AND_INTEGRATION",
+            "EPU_CATS_TRADE_POLICY"
+          ]
+        },
+        "international_trade": {
+          "label": "International trade",
+          "themes": [
+            "WB_698_TRADE",
+            "WB_772_TRADE_FACILITATION_AND_LOGISTICS",
+            "WB_2601_TRADE_LINKAGES_SPILLOVERS_AND_CONNECTIVITY",
+            "TAX_ECON_FREETRADEAGREEMENTS",
+            "WB_2575_TRADE_POLICY_AND_INVESTMENT_AGREEMENTS",
+            "ECON_FREETRADE",
+            "ECON_TRADE_DISPUTE",
+            "WB_776_TRADE_POLICY",
+            "WB_780_TRADE_IN_SERVICES",
+            "ECON_DEVELOPMENTORGS_WORLD_TRADE_ORGANIZATION",
+            "WB_1136_TRADE_BALANCE",
+            "WB_765_TRADE_COMPETITIVENESS_AND_DIVERSIFICATION",
+            "WB_1015_TRADE_REGULATION",
+            "WB_192_AGRICULTURAL_TRADE",
+            "WB_782_SERVICES_TRADE_COMPETITIVENESS"
+          ]
+        },
+        "costs": {
+          "label": "Transport costs",
+          "themes": [
+            "ECON_TRANSPORT_COST",
+            "WB_1630_TRANSPORT_SUBSIDIES",
+            "WB_1819_TRANSPORT_EFFICIENCY"
+          ]
+        },
+        "risks": {
+          "label": "Risks",
+          "themes": [
+            "SOC_TRAFFICACCIDENT",
+            "INFRASTRUCTURE_BAD_ROADS",
+            "WB_1808_TRANSPORT_SAFETY",
+            "MANMADE_DISASTER_TRAFFIC_ACCIDENT",
+            "WB_784_TRAFFIC_AND_ROAD_SAFETY",
+            "MANMADE_DISASTER_TRAFFIC_COLLISION",
+            "MANMADE_DISASTER_ABANDON_SHIP",
+            "ROAD_INCIDENT_TRAFFIC_ACCIDENT",
+            "MANMADE_DISASTER_ABANDONED_SHIP",
+            "MANMADE_DISASTER_TRANSPORTATION_DISASTER",
+            "MANMADE_DISASTER_TRANSPORT_DISASTER",
+            "WB_791_TRANSPORT_IMPACT_ON_THE_ENVIRONMENT",
+            "WB_1141_ECONOMIC_SHOCKS_AND_TRADE"
+          ]
+        }
+      }
+    },
+    "commodities": {
+      "label": "Commodities",
+      "categories": {
+        "materials": {
+          "label": "Materials",
+          "themes": [
+            "WB_1079_COMMODITIES_AND_RESOURCES",
+            "SLFID_NATURAL_RESOURCES",
+            "SLFID_MINERAL_RESOURCES",
+            "ENV_METALS",
+            "WB_2936_GOLD",
+            "WB_2931_IRON",
+            "WB_2934_COPPER"
+          ]
+        },
+        "regulation": {
+          "label": "Policies, law and regulation",
+          "themes": [
+            "WB_963_NATURAL_RESOURCES_LAW",
+            "WB_554_MINING_POLICY_LAWS_AND_REGULATIONS",
+            "WB_559_MINING_LAWS_AND_REGULATIONS",
+            "WB_2323_MINING_REGULATION",
+            "WB_557_GOVERNANCE_FOR_MINING",
+            "WB_2324_MINING_LICENSING_AND_REGISTRATION",
+            "WB_556_MINING_FISCAL_POLICIES_AND_REVENUE_COLLECTION",
+            "WB_2308_MINE_CLOSURE_REGULATION",
+            "WB_558_GOVERNMENT_INSTITUTIONS_FOR_MINING",
+            "WB_2930_MINING_CADASTRE",
+            "WB_560_LICENSING_AND_CONTRACTING_OF_MINERALS",
+            "WB_2276_SAFEGUARDS_FOR_MINING",
+            "WB_2275_NATURAL_RESOURCES_REVENUE_MANAGEMENT"
+          ]
+        },
+        "extraction": {
+          "label": "Extraction methods and infrastructures",
+          "themes": [
+            "WB_895_MINING_SYSTEMS",
+            "ENV_MINING",
+            "WB_1699_METAL_ORE_MINING",
+            "WB_1700_NONMETALLIC_MINERAL_MINING_AND_QUARRYING",
+            "WB_1698_COAL_MINING",
+            "TAX_FNCACT_MINER",
+            "TAX_FNCACT_MINERS",
+            "TAX_FNCACT_COAL_MINER",
+            "TAX_FNCACT_COAL_MINERS",
+            "TAX_FNCACT_GOLD_MINER",
+            "TAX_FNCACT_GOLD_MINERS",
+            "TAX_FNCACT_MINEWORKER",
+            "TAX_FNCACT_MINEWORKERS",
+            "WB_555_ARTISANAL_AND_SMALL_SCALE_MINING",
+            "WB_1701_MINING_SERVICES",
+            "WB_2315_STATE_MINING_ENTERPRISES"
+          ]
+        },
+        "market_prices": {
+          "label": "Market and prices",
+          "themes": [
+            "ECON_GOLDPRICE",
+            "FUELPRICES",
+            "WB_1164_COMMODITY_PRICES_SHOCKS",
+            "WB_3000_COMMODITY_RICH_COUNTRIES",
+            "WB_1186_CRITICAL_COMMODITIES_FINANCE",
+            "WB_1187_STRUCTURED_TRADE_COMMODITY_FINANCE"
+          ]
+        },
+        "risks": {
+          "label": "Risks",
+          "themes": [
+            "WB_2316_CONFLICT_MINERALS"
+          ]
+        }
+      }
+    }
+  }
+}

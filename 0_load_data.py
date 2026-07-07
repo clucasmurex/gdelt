@@ -1,4 +1,3 @@
-# fileName: gdelt_monthly_pipeline.py
 import os
 import sys
 import time
@@ -34,7 +33,7 @@ def load_source_dictionary():
                 if source_to_id:
                     next_source_id = max(int(v) for v in source_to_id.values()) + 1
         except Exception as e:
-            print(f"⚠️ Impossible de charger le dictionnaire de sources : {e}")
+            print(f"Impossible de charger le dictionnaire de sources : {e}")
 
 def save_source_dictionary():
     global source_to_id, id_to_source
@@ -42,7 +41,7 @@ def save_source_dictionary():
         with open(SOURCE_DICT_PATH, 'w', encoding='utf-8') as f:
             json.dump({"source_to_id": source_to_id, "id_to_source": id_to_source}, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"⚠️ Impossible de sauvegarder le dictionnaire de sources : {e}")
+        print(f"Impossible de sauvegarder le dictionnaire de sources : {e}")
 
 def get_or_create_source_id(source_name):
     global next_source_id
@@ -197,7 +196,7 @@ def writer_thread_fn(write_queue, parquet_filepath, zstd_level, row_group_size, 
             del merged
         except Exception as e:
             failed += 1
-            print(f"    ⚠️ Flush ignoré (schéma incompatible) : {e}")
+            print(f"Flush ignoré (schéma incompatible) : {e}")
         buffer_tables.clear()
 
     while True:
@@ -258,10 +257,10 @@ class GDELTRollingPipeline:
                 any_success = True
                 print(f"  ✓ Liste {label} : {total - count_before:,} fichiers GKG.")
             except Exception as e:
-                print(f"  ⚠️ Impossible de charger la liste {label} : {e}")
+                print(f" Impossible de charger la liste {label} : {e}")
 
         if not any_success:
-            print("💥 Erreur critique : aucune master list chargée.")
+            print("Erreur critique : aucune master list chargée.")
             sys.exit(1)
         print(f"✓ Total combiné : {total:,} fichiers GKG sur {len(self.urls_by_month)} mois.")
 
@@ -279,22 +278,22 @@ class GDELTRollingPipeline:
         self.load_master_list()
         months_to_process = self.generate_months_list(start_date, end_date)
 
-        print(f"\n🚀 PIPELINE MENSUEL — Arrow IPC + producteur-consommateur")
+        print(f"\nPIPELINE MENSUEL — Arrow IPC + producteur-consommateur")
         print(f"   zstd niv.{self.zstd_compression_level} | "
               f"row_group {self.row_group_size:,} | "
               f"{self.cpu_workers} CPU | {self.net_workers} net")
-        print(f"📂 Zone Tampon : {self.temp_dir}")
-        print(f"💾 Parquet DB  : {self.final_dir}\n")
+        print(f"Zone Tampon : {self.temp_dir}")
+        print(f"Parquet DB  : {self.final_dir}\n")
 
         for idx, month_str in enumerate(months_to_process, 1):
             parquet_filename = f"gdelt_{month_str[:4]}-{month_str[4:]}.parquet"
             parquet_filepath = self.final_dir / parquet_filename
 
             if parquet_filepath.exists():
-                print(f"⏭️  [{idx}/{len(months_to_process)}] {month_str} déjà converti.")
+                print(f"  [{idx}/{len(months_to_process)}] {month_str} déjà converti.")
                 continue
 
-            print(f"🔄 [{idx}/{len(months_to_process)}] Traitement du mois : {month_str}")
+            print(f"[{idx}/{len(months_to_process)}] Traitement du mois : {month_str}")
             month_urls  = self.urls_by_month.get(month_str, [])
             total_files = len(month_urls)
             if total_files == 0:
@@ -302,7 +301,7 @@ class GDELTRollingPipeline:
                 continue
 
             # ── ÉTAPE 1 : Téléchargement ──────────────────────────────────────
-            print(f"  📥 Téléchargement de {total_files} fichiers (.zip)...")
+            print(f"  Téléchargement de {total_files} fichiers (.zip)...")
             t0 = time.time()
             success, skipped, failed, done = 0, 0, 0, 0
             progress_step = max(1, total_files // 20)
@@ -320,7 +319,7 @@ class GDELTRollingPipeline:
             print(f"  ✓ Téléchargement en {time.time() - t0:.0f}s")
 
             # ── ÉTAPE 2 : Parsing parallèle (Arrow IPC) + écriture asynchrone ─
-            print(f"  🗜️  Parsing ({self.cpu_workers} workers, Arrow IPC) + écriture asynchrone...")
+            print(f"   Parsing ({self.cpu_workers} workers, Arrow IPC) + écriture asynchrone...")
             t1 = time.time()
             local_zips        = list(self.temp_dir.glob('*.zip'))
             total_zips        = len(local_zips)
@@ -387,27 +386,27 @@ class GDELTRollingPipeline:
             save_source_dictionary()
 
             if articles_comptes > 0:
-                print(f"  🟢 {parquet_filename} — "
+                print(f"   {parquet_filename} — "
                       f"{articles_comptes:,} articles en {time.time() - t1:.0f}s.")
                 if chunks_failed:
-                    print(f"  ⚠️ {chunks_failed} chunk(s) ignoré(s).")
+                    print(f"   {chunks_failed} chunk(s) ignoré(s).")
             else:
-                print(f"  ❌ Aucun article extrait pour {month_str}")
+                print(f"   Aucun article extrait pour {month_str}")
 
             # ── ÉTAPE 4 : Purge de la zone tampon ─────────────────────────────
-            print(f"  🧹 Purge zone tampon...")
+            print(f"   Purge zone tampon...")
             for f in self.temp_dir.glob('*'):
                 try: os.remove(f)
                 except Exception: pass
-            print(f"  ✨ Zone tampon vidée.\n")
+            print(f"   Zone tampon vidée.\n")
 
-        print("🏆 PIPELINE EXÉCUTÉ AVEC SUCCÈS !")
+        print(" PIPELINE EXÉCUTÉ AVEC SUCCÈS !")
 
 
 if __name__ == "__main__":
     pipeline = GDELTRollingPipeline(
-        temp_dir='./gdelt_buffer_temp',
-        final_dir='./gdelt_parquet_dbv2',
+        temp_dir='/data/gdelt/gdelt_buffer_temp',
+        final_dir='/data/gdelt/gdelt_parquet_dbv2',
         net_workers=32,
         cpu_workers=50,
         zstd_compression_level=6,
@@ -416,6 +415,6 @@ if __name__ == "__main__":
     )
 
     pipeline.process_pipeline(
-        start_date='2025-06-01',
+        start_date='2015-01-01',
         end_date='2025-06-30',
     )

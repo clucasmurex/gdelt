@@ -26,17 +26,17 @@ REGIONS = {
     "Japan": ["JA"],
     "Lebanon": ["LE"],
     "North America": ["US", "CA", "MX"],
-    "South America": ["AR", "BL", "BR", "CI", "CO", "EC", "GY", "PA", "PE", "UY", "VE"],
+    "South America": ["AR", "BL", "BR", "CI", "CO", "EC", "GY", "PM", "PA", "PE", "UY", "VE", "NS"],
     "European Union": [
         "AU", "BE", "BU", "HR", "CY", "EZ", "DA", "EN", "FI", "FR", "GM", "GR", 
-        "HU", "EI", "IT", "LG", "LH", "MT", "NL", "PL", "PO", "RO", "LO", "SI", "SP", "SW"
+        "HU", "EI", "IT", "LG", "LH", "MT", "NL", "PL", "PO", "RO", "LO", "SI", "SP", "SW", "LU"
     ],
     "Middle East": ["SA", "IR", "IZ", "SY", "JO", "IS", "LE", "KU", "QA", "AE", "YM", "MU", "BA", "TU"],
-    "South East Asia": ["ID", "MY", "PH", "SN", "TH", "VM", "CB", "LA", "BM"],
+    "South East Asia": ["ID", "MY", "PH", "SN", "TH", "VM", "CB", "LA", "BM", "BX", "TT"],
     "Africa": [
         "AG", "AO", "BN", "BC", "UV", "BY", "CM", "CV", "CT", "CD", "DJ", "EG", "EK", "ER", "ET", 
         "GB", "GA", "GH", "GV", "PU", "KE", "LT", "LI", "LY", "MA", "MI", "ML", "MR", "MP", "WA", 
-        "NG", "NI", "RW", "SG", "SE", "SL", "SO", "SF", "OD", "WZ", "TZ", "TO", "TS", "UG", "ZA", "ZI"
+        "NG", "NI", "RW", "SG", "SE", "SL", "SO", "SF", "OD", "WZ", "TZ", "TO", "TS", "UG", "ZA", "ZI", "CN", "CF", "IV", "MO", "MZ", "CG", "TP", "SU"
     ]
 }
 # ──────────────────────────────────────────────────────────────────────────────
@@ -267,8 +267,8 @@ def compute_sector_indicators_geo(con, sector_key, sector_cfg):
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--parquet_dir",  type=Path, default=Path("./gdelt_parquet_db"))
-    p.add_argument("--source_map",   type=Path, default=Path("./gdelt_sources_mapping.json"))
+    p.add_argument("--parquet_dir",  type=Path, default=Path("/data/gdelt/gdelt_parquet_db"))
+    p.add_argument("--source_map",   type=Path, default=Path("/data/gdelt/gdelt_sources_mapping.json"))
     p.add_argument("--config",       type=Path, default=Path("./sectors_config.json"))
     p.add_argument("--output_dir",   type=Path, default=Path("./indicators_geo"))
     p.add_argument("--sectors",      nargs="*", default=None)
@@ -278,7 +278,7 @@ def parse_args():
     p.add_argument("--min_active_years",        type=int, default=2)
     p.add_argument("--min_themes",              type=int, default=2)
     p.add_argument("--threads",    type=int, default=64)
-    p.add_argument("--memory_gb",  type=int, default=150)
+    p.add_argument("--memory_gb",  type=int, default=200) 
     return p.parse_args()
 
 def main():

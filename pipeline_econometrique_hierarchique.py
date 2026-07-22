@@ -100,7 +100,7 @@ def prep_gdelt_data(df_geo_region, cols_to_fetch, df_macro, macro_col):
 
 def run_hierarchical_pipeline(df_geo, region, type_gdelt, parent_sectors, macro_tickers_dict, start_date="2014-01-01"):
     print("="*90)
-    print(f"🌍 AUDIT ÉCONOMÉTRIQUE HIÉRARCHIQUE : {region.upper()} | IND. : {type_gdelt.upper()}")
+    print(f"AUDIT ÉCONOMÉTRIQUE HIÉRARCHIQUE : {region.upper()} | IND. : {type_gdelt.upper()}")
     print("="*90)
     
     # ─── 0. TÉLÉCHARGEMENT MACRO ───
@@ -125,7 +125,7 @@ def run_hierarchical_pipeline(df_geo, region, type_gdelt, parent_sectors, macro_
     # 📌 PHASE 1 : LE FILTRE GLOBAL (GRANDS SECTEURS)
     # =========================================================================
     print("\n" + "▼"*90)
-    print("📌 PHASE 1 : COMPÉTITION DES GRANDS THÈMES (MACRO-NARRATIONS)")
+    print("PHASE 1 : COMPÉTITION DES GRANDS THÈMES (MACRO-NARRATIONS)")
     print("Objectif : Identifier les secteurs majeurs qui annoncent l'inflation (Lags T+1 à T+6).")
     print("Lecture  : Les cases foncées à droite (T > 0) sont vos Indicateurs Avancés robustes.")
     print("▼"*90)
@@ -134,7 +134,7 @@ def run_hierarchical_pipeline(df_geo, region, type_gdelt, parent_sectors, macro_
     df_phase1, z_cols_p1 = prep_gdelt_data(df_geo_region, base_cols, df_macro, macro_col)
     
     if df_phase1 is None or df_phase1.empty:
-        print("❌ Données GDELT insuffisantes pour les secteurs demandés.")
+        print("Données GDELT insuffisantes pour les secteurs demandés.")
         return
 
     row_labels_p1 = [c.replace('_zscore', '') for c in z_cols_p1] + ["_INERTIE_MACRO_"]
@@ -174,21 +174,21 @@ def run_hierarchical_pipeline(df_geo, region, type_gdelt, parent_sectors, macro_
         if has_signal: winning_parents.append(clean_name)
 
     if not winning_parents:
-        print("\n❌ Aucun secteur majeur n'a de pouvoir prédictif statistiquement significatif. Fin de l'analyse.")
+        print("\nAucun secteur majeur n'a de pouvoir prédictif statistiquement significatif. Fin de l'analyse.")
         return
 
     # =========================================================================
     # 📌 PHASE 2 : LE MICROSCOPE (SOUS-INDICATEURS DES VAINQUEURS)
     # =========================================================================
     print("\n\n" + "▼"*90)
-    print(f"📌 PHASE 2 : DEEP DIVE SUR LES THÈMES GAGNANTS ({len(winning_parents)} trouvés)")
+    print(f"PHASE 2 : DEEP DIVE SUR LES THÈMES GAGNANTS ({len(winning_parents)} trouvés)")
     print("Objectif : Pour chaque thème vainqueur, isoler la SOUS-CATÉGORIE exacte qui porte le signal.")
     print("▼"*90)
 
     top_candidates_for_irf = [] # Stockera les meilleurs sous-indicateurs absolus
     
     for parent in winning_parents:
-        print(f"\n🔍 FORAGE DANS LE SECTEUR : {parent.upper()}")
+        print(f"\nFORAGE DANS LE SECTEUR : {parent.upper()}")
         
         # On aspire toutes les sous-catégories de ce parent précis
         sub_cols = [c for c in df_geo_region.columns if c.startswith(f"{parent}_") and c != parent]
@@ -241,7 +241,7 @@ def run_hierarchical_pipeline(df_geo, region, type_gdelt, parent_sectors, macro_
         }))
         
         if best_sub_name:
-            print(f"  🏆 Meilleure Narration détectée : {best_sub_name.replace('_zscore', '').upper()} (Impact: {best_sub_coef:.2f})")
+            print(f"  Meilleure Narration détectée : {best_sub_name.replace('_zscore', '').upper()} (Impact: {best_sub_coef:.2f})")
             top_candidates_for_irf.append({'sector': best_sub_name, 'abs_coef': best_sub_coef, 'df': df_phase2})
         else:
             print("  ⚠ Aucune sous-catégorie n'a survécu à l'isolation.")
@@ -250,11 +250,11 @@ def run_hierarchical_pipeline(df_geo, region, type_gdelt, parent_sectors, macro_
     # 📌 PHASE 3 : MODÉLISATION DE CHOC (VAR / IRF) SUR L'ÉLITE
     # =========================================================================
     if not top_candidates_for_irf:
-        print("\n❌ Aucun sous-indicateur qualifié pour les IRF.")
+        print("\nAucun sous-indicateur qualifié pour les IRF.")
         return
 
     print("\n\n" + "▼"*90)
-    print("📌 PHASE 3 : SIMULATION DE CRISE (FONCTIONS DE RÉPONSE IMPULSIONNELLE)")
+    print("PHASE 3 : SIMULATION DE CRISE (FONCTIONS DE RÉPONSE IMPULSIONNELLE)")
     print("Objectif : Visualiser l'impact économique sur 12 mois d'un choc sur les meilleurs narratifs.")
     print("▼"*90)
 
@@ -264,7 +264,7 @@ def run_hierarchical_pipeline(df_geo, region, type_gdelt, parent_sectors, macro_
     for cand in top_candidates_for_irf:
         best_sector = cand['sector']
         clean_name = best_sector.replace('_zscore', '')
-        print(f"\n💥 Choc Simulatif (+1 Écart-type) sur le récit : {clean_name.upper()}")
+        print(f"\nChoc Simulatif (+1 Écart-type) sur le récit : {clean_name.upper()}")
         
         # On utilise le DataFrame de la Phase 2 où les Z-scores étaient déjà calculés proprement
         df_var = cand['df'][[best_sector, macro_col]].dropna()
@@ -294,5 +294,5 @@ def run_hierarchical_pipeline(df_geo, region, type_gdelt, parent_sectors, macro_
             print(f"Erreur lors du calcul de l'IRF pour {clean_name}: {e}")
 
     print("\n" + "="*90)
-    print(f"✅ FIN DE L'AUDIT POUR {region.upper()}")
+    print(f"FIN DE L'AUDIT POUR {region.upper()}")
     print("="*90 + "\n")

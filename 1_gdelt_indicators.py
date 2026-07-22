@@ -1,11 +1,3 @@
-"""
-build_gdelt_indicators_fast_v10.py
-==================================
-Pipeline ultra-optimisé calculant simultanément 10 indicateurs croisés 
-(Attention, Sentiments Continus/Binaires, Pondérés/Non-Pondérés et Interactions)
-grâce à une matérialisation en RAM DuckDB.
-"""
-
 import argparse
 import json
 import time
@@ -28,13 +20,11 @@ def make_connection(threads: int, memory_gb: int) -> duckdb.DuckDBPyConnection:
     con.execute(f"PRAGMA threads={threads}")
     con.execute(f"PRAGMA memory_limit='{memory_gb}GB'")
     
-    # CORRECTION 1 : On crée un dossier temporaire LOCAL au lieu de saturer le /tmp global
+    # On crée un dossier temporaire LOCAL au lieu de saturer le /tmp global
     tmp_dir = Path("./duckdb_tmp")
     tmp_dir.mkdir(exist_ok=True)
     con.execute(f"PRAGMA temp_directory='{tmp_dir}'")
     
-    # OPTIMISATION : On dit à DuckDB de ne pas garder l'ordre d'insertion en mémoire,
-    # ce qui permet d'économiser énormément de ressources lors des GROUP BY.
     con.execute("SET preserve_insertion_order=false")
     
     return con

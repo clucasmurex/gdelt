@@ -90,7 +90,7 @@ def compute_global_whitelist(con, parquet_dir, source_map_path, min_articles, mi
     con.execute("COPY global_valid_sources TO 'valid_sources_whitelist.parquet' (FORMAT PARQUET)")
     print(f"  ✓ Whitelist globale générée : {con.execute('SELECT COUNT(*) FROM global_valid_sources').fetchone()[0]:,} sources.")
 
-def build_materialized_clean_table(con, glob_pattern, source_map_path, min_words, max_words, min_themes):
+def build_materialized_clean_table(con, glob_pattern, source_map_path, retained_ids_path, min_words, max_words, min_themes):
     with open(source_map_path, "r", encoding="utf-8") as f:
         source_map = json.load(f)
     con.register("src_map", pd.DataFrame({
@@ -98,7 +98,13 @@ def build_materialized_clean_table(con, glob_pattern, source_map_path, min_words
         "SourceCommonName":    list(source_map["id_to_source"].values()),
     }))
     
-    # NOUVEAUTÉ : Extraction propre des codes pays uniques dans "countries_list"
+    # 🔥 Chargement de VOTRE liste d'IDs retenus
+    con.execute(f"""
+        CREATE OR REPLACE TEMPORARY TABLE retained_ids AS 
+        SELECT column0::BIGINT AS id 
+        FROM read_csv('{retained_ids_path}', header=False)
+    """)
+    
     con.execute(fr"""
         CREATE TEMPORARY TABLE temp_mapped AS
         WITH raw AS (
@@ -122,16 +128,14 @@ def build_materialized_clean_table(con, glob_pattern, source_map_path, min_words
             CAST(m.Tone AS DOUBLE) AS tone,
             SIGN(CAST(m.Tone AS DOUBLE)) AS tone_bin,
             ARRAY_LENGTH(string_split(m.EnhancedThemes, ';')) AS total_themes_count,
-            
             list_transform(string_split(m.EnhancedThemes, ';'), x -> upper(trim(split_part(trim(x), ',', 1)))) AS themes_list,
-            
             list_filter(
                 list_distinct(list_transform(string_split(m.EnhancedLocations, ';'), x -> split_part(x, '#', 3))),
                 c -> c != ''
             ) AS countries_list
-
         FROM temp_mapped m
-        INNER JOIN read_parquet('valid_sources_whitelist.parquet') v ON m.Src_ID = v.Src_ID
+        -- 🔥 Le filtre clé : on ne garde QUE vos sources validées
+        INNER JOIN retained_ids rid ON m.Src_ID = rid.id
         WHERE ARRAY_LENGTH(string_split(m.EnhancedThemes, ';')) >= {min_themes};
         
         DROP TABLE temp_mapped;
@@ -168,7 +172,6 @@ def compute_total_news_regional(con):
 # ══════════════════════════════════════════════════════════════════════════════
 # 2. CALCUL DES INDICATEURS GÉOGRAPHIQUES
 # ══════════════════════════════════════════════════════════════════════════════
-
 def compute_sector_indicators_geo(con, sector_key, sector_cfg):
     categories = sector_cfg["categories"]
     con.register("sector_themes_tbl", pd.DataFrame([
@@ -176,28 +179,36 @@ def compute_sector_indicators_geo(con, sector_key, sector_cfg):
         for cat_key, cat_cfg in categories.items() for theme in cat_cfg["themes"]
     ]))
 
-    # La requête groupe désormais par "period", "region_key" et "cat_key"
+    # 🔥 REQUÊTE HAUTEMENT OPTIMISÉE POUR ÉVITER L'EXPLOSION DE LA MÉMOIRE (TEMP FILES)
     query = """
     WITH 
-    unnested AS (
-        SELECT g.GKGRECORDID, g.period, g.tone, g.tone_bin, g.total_themes_count, unnest(g.themes_list) as theme,
-               ar.region_key
-        FROM gkg_clean g
-        INNER JOIN article_regions ar ON g.GKGRECORDID = ar.GKGRECORDID
+    -- 1. On "dépile" les thèmes SANS les régions (pour éviter l'explosion combinatoire)
+    article_theme_unnest AS (
+        SELECT GKGRECORDID, period, tone, tone_bin, total_themes_count, unnest(themes_list) as theme
+        FROM gkg_clean
     ),
-    matched AS (
+    -- 2. On matche avec le dictionnaire du secteur (filtre massif et immédiat)
+    matched_themes AS (
         SELECT 
-            u.GKGRECORDID, u.period, u.region_key, u.tone, u.tone_bin, u.total_themes_count, st.cat_key,
+            u.GKGRECORDID, u.period, u.tone, u.tone_bin, u.total_themes_count, st.cat_key,
             COUNT(*) AS theme_hits
-        FROM unnested u
+        FROM article_theme_unnest u
         INNER JOIN sector_themes_tbl st ON u.theme = st.theme
-        GROUP BY 1, 2, 3, 4, 5, 6, 7
+        GROUP BY 1, 2, 3, 4, 5, 6
     ),
+    -- 3. SEULEMENT MAINTENANT, on multiplie par les zones géographiques !
+    matched_with_regions AS (
+        SELECT 
+            mt.GKGRECORDID, mt.period, ar.region_key, mt.tone, mt.tone_bin, mt.total_themes_count, mt.cat_key, mt.theme_hits
+        FROM matched_themes mt
+        INNER JOIN article_regions ar ON mt.GKGRECORDID = ar.GKGRECORDID
+    ),
+    
     article_cat AS (
         SELECT 
             GKGRECORDID, period, region_key, cat_key, tone, tone_bin,
             (theme_hits::DOUBLE / total_themes_count) AS w
-        FROM matched
+        FROM matched_with_regions
     ),
     monthly_cat AS (
         SELECT 
@@ -211,7 +222,7 @@ def compute_sector_indicators_geo(con, sector_key, sector_cfg):
             GKGRECORDID, period, region_key,
             ANY_VALUE(tone) AS tone, ANY_VALUE(tone_bin) AS tone_bin,
             SUM(theme_hits)::DOUBLE / ANY_VALUE(total_themes_count) AS w_sector
-        FROM matched
+        FROM matched_with_regions
         GROUP BY GKGRECORDID, period, region_key
     ),
     monthly_sector AS (
@@ -272,15 +283,15 @@ def parse_args():
     p.add_argument("--config",       type=Path, default=Path("./sectors_config.json"))
     p.add_argument("--output_dir",   type=Path, default=Path("./indicators_geo"))
     p.add_argument("--sectors",      nargs="*", default=None)
-    p.add_argument("--min_words",               type=int, default=15)
-    p.add_argument("--max_words",               type=int, default=6500)
-    p.add_argument("--min_articles_per_source", type=int, default=30)
-    p.add_argument("--min_active_years",        type=int, default=2)
-    p.add_argument("--min_themes",              type=int, default=2)
-    p.add_argument("--threads",    type=int, default=64)
-    p.add_argument("--memory_gb",  type=int, default=200) 
+    # 🔥 Nouveaux seuils de mots
+    p.add_argument("--min_words",    type=int, default=150)
+    p.add_argument("--max_words",    type=int, default=5500)
+    # 🔥 Fichier des IDs retenus (votre whitelist manuelle)
+    p.add_argument("--retained_ids", type=Path, default=Path("liste_ids_retenus.txt"))
+    p.add_argument("--min_themes",   type=int, default=2)
+    p.add_argument("--threads",      type=int, default=16)
+    p.add_argument("--memory_gb",    type=int, default=150) 
     return p.parse_args()
-
 def main():
     args = parse_args()
     t_total = time.time()
@@ -292,22 +303,13 @@ def main():
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     tmp_dir = Path("./duckdb_tmp")
-    
-    # ── ÉTAPE 0 : Whitelist (inchangé)
-    whitelist_file = Path("valid_sources_whitelist.parquet")
-    if not whitelist_file.exists():
-        print("\n[ÉTAPE 0] Calcul de la Whitelist globale des sources...")
-        if tmp_dir.exists(): shutil.rmtree(tmp_dir, ignore_errors=True)
-        tmp_dir.mkdir(exist_ok=True)
-        con = make_connection(args.threads, args.memory_gb)
-        compute_global_whitelist(con, args.parquet_dir, args.source_map, args.min_articles_per_source, args.min_active_years)
-        con.close()
-        shutil.rmtree(tmp_dir, ignore_errors=True)
 
+    # On liste directement les fichiers et on attaque le traitement
     all_files = list(args.parquet_dir.glob("gdelt_*.parquet"))
     years = sorted(list(set([f.name.split('_')[1][:4] for f in all_files if f.name.split('_')[1][:4].isdigit()])))
     print(f"\n[INFO] Années détectées pour le traitement : {years}")
     print(f"[INFO] Régions configurées : {list(REGIONS.keys())}")
+    print(f"[INFO] Fichier de sources utilisé : {args.retained_ids}")
 
     for year in years:
         print(f"\n{'═'*65}\n  TRAITEMENT BATCH ANNÉE {year}\n{'═'*65}")
@@ -320,7 +322,8 @@ def main():
 
         try:
             print("[1/4] Matérialisation de la base nettoyée ...")
-            build_materialized_clean_table(con, glob_pattern, args.source_map, args.min_words, args.max_words, args.min_themes)
+            # 🔥 L'appel est mis à jour ici avec args.retained_ids
+            build_materialized_clean_table(con, glob_pattern, args.source_map, args.retained_ids, args.min_words, args.max_words, args.min_themes)
 
             print("[2/4] Cartographie des articles par zones géographiques ...")
             map_articles_to_regions(con)

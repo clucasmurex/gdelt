@@ -1,3 +1,10 @@
+"""
+build_gdelt_indicators.py
+=============================
+Pipeline GDELT global (sans géographie).
+Calcule les 10 indicateurs par jour à l'échelle mondiale.
+"""
+
 import argparse
 import json
 import time
@@ -15,6 +22,7 @@ def _fmt(n: int) -> str:
 def _elapsed(t0: float) -> str:
     s = time.time() - t0
     return f"{int(s//60)}m{int(s%60):02d}s"
+
 def make_connection(threads: int, memory_gb: int) -> duckdb.DuckDBPyConnection:
     con = duckdb.connect()
     con.execute(f"PRAGMA threads={threads}")
@@ -33,58 +41,12 @@ def make_connection(threads: int, memory_gb: int) -> duckdb.DuckDBPyConnection:
 # ══════════════════════════════════════════════════════════════════════════════
 # 1. MATÉRIALISATION DE LA TABLE UNIQUE NETTOYÉE
 # ══════════════════════════════════════════════════════════════════════════════
-def compute_global_whitelist(
-    con: duckdb.DuckDBPyConnection,
-    parquet_dir: Path,
-    source_map_path: Path,
-    min_articles: int,
-    min_years: int
-) -> None:
-    """
-    Scanne toute la base rapidement (uniquement les colonnes nécessaires) 
-    pour identifier les sources globalement valides.
-    """
-    glob_pattern = str(parquet_dir / "gdelt_*.parquet")
-    
-    with open(source_map_path, "r", encoding="utf-8") as f:
-        source_map = json.load(f)
-        
-    src_df = pd.DataFrame({
-        "SourceCommonName_ID": [int(k) for k in source_map["id_to_source"]],
-        "SourceCommonName":    list(source_map["id_to_source"].values()),
-    })
-    con.register("src_map", src_df)
-
-    con.execute(fr"""
-        CREATE TABLE global_valid_sources AS
-        WITH raw_src AS (
-            -- On ne lit QUE ce dont on a besoin, ce sera très rapide
-            SELECT 
-                COALESCE(NULLIF(r.SourceCommonName_ID, 0), m.SourceCommonName_ID) AS Src_ID,
-                substr(CAST(DATE AS VARCHAR), 1, 4) AS pub_year
-            FROM read_parquet('{glob_pattern}') r
-            LEFT JOIN src_map m ON RTRIM(regexp_extract(r.DocumentIdentifier, 'https?://(?:www\.)?([^/?:]+)', 1), '\.') = m.SourceCommonName
-            WHERE regexp_matches(CAST(DATE AS VARCHAR), '^\d{{14}}$')
-              AND GKGRECORDID != '20210925181500-T1111'
-        )
-        SELECT Src_ID
-        FROM raw_src
-        WHERE Src_ID IS NOT NULL
-        GROUP BY Src_ID
-        HAVING COUNT(*) >= {min_articles}
-           AND COUNT(DISTINCT pub_year) >= {min_years};
-    """)
-    
-    # On sauvegarde la liste dans un fichier sur le disque
-    con.execute("COPY global_valid_sources TO 'valid_sources_whitelist.parquet' (FORMAT PARQUET)")
-    
-    n = con.execute("SELECT COUNT(*) FROM global_valid_sources").fetchone()[0]
-    print(f"  ✓ Whitelist globale générée : {n:,} sources respectent les critères (>={min_years} ans, >={min_articles} articles).")
 
 def build_materialized_clean_table(
     con: duckdb.DuckDBPyConnection,
     glob_pattern: str,
     source_map_path: Path,
+    retained_ids_path: Path,
     min_words: int,
     max_words: int,
     min_themes: int,
@@ -97,6 +59,13 @@ def build_materialized_clean_table(
         "SourceCommonName":    list(source_map["id_to_source"].values()),
     })
     con.register("src_map", src_df)
+
+    # 🔥 Chargement de VOTRE liste d'IDs retenus
+    con.execute(f"""
+        CREATE OR REPLACE TEMPORARY TABLE retained_ids AS 
+        SELECT column0::BIGINT AS id 
+        FROM read_csv('{retained_ids_path}', header=False)
+    """)
 
     con.execute(fr"""
         CREATE TEMPORARY TABLE temp_mapped AS
@@ -127,8 +96,8 @@ def build_materialized_clean_table(
                 x -> upper(trim(split_part(trim(x), ',', 1)))
             ) AS themes_list
         FROM temp_mapped m
-        -- LA MAGIE EST ICI : On croise avec la whitelist globale
-        INNER JOIN read_parquet('valid_sources_whitelist.parquet') v ON m.Src_ID = v.Src_ID
+        -- 🔥 Le filtre clé : on ne garde QUE vos sources validées
+        INNER JOIN retained_ids rid ON m.Src_ID = rid.id
         WHERE ARRAY_LENGTH(string_split(m.EnhancedThemes, ';')) >= {min_themes};
         
         DROP TABLE temp_mapped;
@@ -282,20 +251,22 @@ def compute_sector_indicators(
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
-    p.add_argument("--parquet_dir",  type=Path, default=Path("./gdelt_parquet_db"))
-    p.add_argument("--source_map",   type=Path, default=Path("./gdelt_sources_mapping.json"))
+    p.add_argument("--parquet_dir",  type=Path, default=Path("/data/gdelt/gdelt_parquet_db"))
+    p.add_argument("--source_map",   type=Path, default=Path("/data/gdelt/gdelt_sources_mapping.json"))
     p.add_argument("--config",       type=Path, default=Path("./sectors_config.json"))
     p.add_argument("--output_dir",   type=Path, default=Path("./indicators"))
     p.add_argument("--sectors",      nargs="*", default=None)
     
-    p.add_argument("--min_words",               type=int, default=15)
-    p.add_argument("--max_words",               type=int, default=6500)
-    p.add_argument("--min_articles_per_source", type=int, default=30)
-    p.add_argument("--min_active_years",        type=int, default=2)
-    p.add_argument("--min_themes",              type=int, default=2)
+    # 🔥 Nouveaux seuils de mots
+    p.add_argument("--min_words",    type=int, default=150)
+    p.add_argument("--max_words",    type=int, default=5500)
+    
+    # 🔥 Fichier des IDs retenus (votre whitelist manuelle)
+    p.add_argument("--retained_ids", type=Path, default=Path("liste_ids_retenus.txt"))
+    p.add_argument("--min_themes",   type=int, default=2)
 
-    p.add_argument("--threads",    type=int, default=64)
-    p.add_argument("--memory_gb",  type=int, default=150)
+    p.add_argument("--threads",      type=int, default=16)
+    p.add_argument("--memory_gb",    type=int, default=150)
 
     return p.parse_args()
 
@@ -311,29 +282,12 @@ def main() -> None:
     
     # Gérer le dossier temporaire proprement
     tmp_dir = Path("./duckdb_tmp")
-    
-    # ── ÉTAPE 0 : Génération de la Whitelist globale ─────────────────────────
-    whitelist_file = Path("valid_sources_whitelist.parquet")
-    if not whitelist_file.exists():
-        print("\n[ÉTAPE 0] Calcul de la Whitelist globale des sources...")
-        if tmp_dir.exists():
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-        tmp_dir.mkdir(exist_ok=True)
-        
-        con = make_connection(args.threads, args.memory_gb)
-        compute_global_whitelist(
-            con, args.parquet_dir, args.source_map, 
-            args.min_articles_per_source, args.min_active_years
-        )
-        con.close()
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-    else:
-        print("\n[ÉTAPE 0] Whitelist globale détectée. Utilisation du cache existant.")
 
     # ── Identifier les années à traiter ──────────────────────────────────────
     all_files = list(args.parquet_dir.glob("gdelt_*.parquet"))
     years = sorted(list(set([f.name.split('_')[1][:4] for f in all_files if f.name.split('_')[1][:4].isdigit()])))
     print(f"\n[INFO] Années détectées pour le traitement : {years}")
+    print(f"[INFO] Fichier de sources utilisé : {args.retained_ids}")
 
     # ── 2. Boucle Principale par Année ──────────────────────────────────────
     for year in years:
@@ -358,8 +312,10 @@ def main() -> None:
         try:
             print("[1/3] Matérialisation de la base nettoyée ...")
             t0 = time.time()
+            
+            # 🔥 L'appel est mis à jour ici avec args.retained_ids
             build_materialized_clean_table(
-                con, glob_pattern, args.source_map, 
+                con, glob_pattern, args.source_map, args.retained_ids,
                 args.min_words, args.max_words, 
                 args.min_themes
             )

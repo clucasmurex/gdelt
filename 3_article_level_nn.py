@@ -126,11 +126,11 @@ def plot_bybee_tsne(df_articles, topic_cols, filename="Fig_Bybee_tSNE.pdf"):
     df['dominant_topic'] = df[topic_cols].idxmax(axis=1).str.replace('att_weight_', '', regex=False)
 
     # Masques de pureté (seuils du papier de Bybee)
-    mask_pure = df['max_proportion'] > 0.33
-    mask_mixed = df['max_proportion'] < 0.25
+    mask_pure = df['max_proportion'] > 0.50
+    mask_mixed = df['max_proportion'] < 0.33
 
-    print(f"   > Articles Purs (>33%) : {mask_pure.sum():,}")
-    print(f"   > Articles Mixtes (<25%) : {mask_mixed.sum():,}")
+    print(f"   > Articles Purs (>50%) : {mask_pure.sum():,}")
+    print(f"   > Articles Mixtes (<33%) : {mask_mixed.sum():,}")
 
     print("3. Calcul de la projection t-SNE (peut prendre 1-3 minutes)...")
     tsne = TSNE(n_components=2, perplexity=40, random_state=42, n_jobs=-1, init='pca')
@@ -169,10 +169,10 @@ def plot_bybee_tsne(df_articles, topic_cols, filename="Fig_Bybee_tSNE.pdf"):
         hue='dominant_topic', palette=color_map, legend=False, 
         ax=ax_left, **scatter_kws
     )
-    ax_left.set_title("“Pure” Articles (Max Proportion > 33%)", fontsize=12, pad=10)
+    ax_left.set_title("“Pure” Articles (Max Proportion > 50%)", fontsize=12, pad=10)
     ax_left.axis('off')
 
-    # --- GRAPHIQUE BAS DROITE : ARTICLES MIXTES (<25%) ---
+    # --- GRAPHIQUE BAS DROITE : ARTICLES MIXTES (<33%) ---
     ax_right = fig.add_subplot(gs[1, 1])
     ax_right.scatter(df['tsne_1'], df['tsne_2'], color='lightgray', s=0.5, alpha=0.2)
     sns.scatterplot(
@@ -180,7 +180,7 @@ def plot_bybee_tsne(df_articles, topic_cols, filename="Fig_Bybee_tSNE.pdf"):
         hue='dominant_topic', palette=color_map, legend=False, 
         ax=ax_right, **scatter_kws
     )
-    ax_right.set_title("“Mixed” Articles (Max Proportion < 25%)", fontsize=12, pad=10)
+    ax_right.set_title("“Mixed” Articles (Max Proportion < 33%)", fontsize=12, pad=10)
     ax_right.axis('off')
 
     plt.tight_layout()

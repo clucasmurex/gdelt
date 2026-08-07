@@ -90,7 +90,7 @@ def compute_global_whitelist(con, parquet_dir, source_map_path, min_articles, mi
     con.execute("COPY global_valid_sources TO 'valid_sources_whitelist.parquet' (FORMAT PARQUET)")
     print(f"  ✓ Whitelist globale générée : {con.execute('SELECT COUNT(*) FROM global_valid_sources').fetchone()[0]:,} sources.")
 
-def build_materialized_clean_table(con, glob_pattern, source_map_path, retained_ids_path, min_words, max_words, min_themes):
+def build_materialized_clean_table(con, glob_pattern, source_map_path, retained_ids_path, min_words, max_words, min_themes, month_str):
     with open(source_map_path, "r", encoding="utf-8") as f:
         source_map = json.load(f)
     con.register("src_map", pd.DataFrame({
@@ -98,7 +98,6 @@ def build_materialized_clean_table(con, glob_pattern, source_map_path, retained_
         "SourceCommonName":    list(source_map["id_to_source"].values()),
     }))
     
-    # 🔥 Chargement de VOTRE liste d'IDs retenus
     con.execute(f"""
         CREATE OR REPLACE TEMPORARY TABLE retained_ids AS 
         SELECT column0::BIGINT AS id 
@@ -110,6 +109,7 @@ def build_materialized_clean_table(con, glob_pattern, source_map_path, retained_
         WITH raw AS (
             SELECT * FROM read_parquet('{glob_pattern}')
             WHERE regexp_matches(CAST(DATE AS VARCHAR), '^\d{{14}}$')
+              AND substr(CAST(DATE AS VARCHAR), 5, 2) = '{month_str}'  -- 🔥 FILTRE DU MOIS ICI
               AND GKGRECORDID != '20210925181500-T1111'
               AND EnhancedThemes IS NOT NULL AND EnhancedThemes != ''
               AND WordCount BETWEEN {min_words} AND {max_words}
@@ -124,7 +124,7 @@ def build_materialized_clean_table(con, glob_pattern, source_map_path, retained_
         CREATE TABLE gkg_clean AS
         SELECT 
             m.GKGRECORDID,
-            date_trunc('month', strptime(substr(CAST(m.DATE AS VARCHAR), 1, 8), '%Y%m%d')::DATE)::DATE AS period,
+            date_trunc('month', strptime(substr(CAST(m.DATE AS VARCHAR), 1, 8), '%Y%m%d')::DATE)::DATE AS period, -- 🔥 AGRÉGATION MENSUELLE
             CAST(m.Tone AS DOUBLE) AS tone,
             SIGN(CAST(m.Tone AS DOUBLE)) AS tone_bin,
             ARRAY_LENGTH(string_split(m.EnhancedThemes, ';')) AS total_themes_count,
@@ -134,7 +134,6 @@ def build_materialized_clean_table(con, glob_pattern, source_map_path, retained_
                 c -> c != ''
             ) AS countries_list
         FROM temp_mapped m
-        -- 🔥 Le filtre clé : on ne garde QUE vos sources validées
         INNER JOIN retained_ids rid ON m.Src_ID = rid.id
         WHERE ARRAY_LENGTH(string_split(m.EnhancedThemes, ';')) >= {min_themes};
         
@@ -314,41 +313,61 @@ def main():
     for year in years:
         print(f"\n{'═'*65}\n  TRAITEMENT BATCH ANNÉE {year}\n{'═'*65}")
         t_year = time.time()
+        
+        # On cible le(s) fichier(s) de l'année (peu importe comment sont gérés les mois dans les noms de fichiers)
         glob_pattern = str(args.parquet_dir / f"gdelt_{year}*.parquet")
         
-        if tmp_dir.exists(): shutil.rmtree(tmp_dir, ignore_errors=True)
-        tmp_dir.mkdir(exist_ok=True)
-        con = make_connection(args.threads, args.memory_gb)
-
-        try:
-            print("[1/4] Matérialisation de la base nettoyée ...")
-            # 🔥 L'appel est mis à jour ici avec args.retained_ids
-            build_materialized_clean_table(con, glob_pattern, args.source_map, args.retained_ids, args.min_words, args.max_words, args.min_themes)
-
-            print("[2/4] Cartographie des articles par zones géographiques ...")
-            map_articles_to_regions(con)
-
-            print("[3/4] Calcul du référentiel régional (Total News Local) ...")
-            compute_total_news_regional(con)
-
-            print(f"[4/4] Calcul des indicateurs géo ({len(sectors)} secteur(s)) ...")
-            for i, (sector_key, sector_cfg) in enumerate(sectors.items(), 1):
+        yearly_results = {sector_key: [] for sector_key in sectors.keys()}
+        
+        for month in range(1, 13):
+            month_str = f"{month:02d}"
+            
+            if tmp_dir.exists(): shutil.rmtree(tmp_dir, ignore_errors=True)
+            tmp_dir.mkdir(exist_ok=True)
+            
+            con = make_connection(args.threads, args.memory_gb)
+            
+            try:
                 t0 = time.time()
-                result_df = compute_sector_indicators_geo(con, sector_key, sector_cfg)
+                # On passe month_str à la requête SQL
+                build_materialized_clean_table(con, glob_pattern, args.source_map, args.retained_ids, args.min_words, args.max_words, args.min_themes, month_str)
+                
+                # Vérifier si des articles ont été trouvés pour ce mois
+                count_clean = con.execute("SELECT COUNT(*) FROM gkg_clean").fetchone()[0]
+                if count_clean == 0:
+                    continue  # Si aucun article ce mois-ci, on passe au suivant
+                
+                print(f"  --- Traitement du mois {month_str}/{year} ({count_clean:,} articles) ---")
 
-                if not result_df.empty:
-                    out_path = args.output_dir / f"{sector_key}_{year}_monthly.parquet"
-                    result_df.to_parquet(out_path, index=False)
-                    print(f"    ✓ {sector_cfg.get('label', sector_key)} ({year}) : {len(result_df)} lignes, {len(result_df.columns)-2} cols - {_elapsed(t0)}")
-                else:
-                    print(f"    ⚠ {sector_cfg.get('label', sector_key)} : Aucune donnée pour l'année {year}.")
+                map_articles_to_regions(con)
+                compute_total_news_regional(con)
 
-        except Exception as e:
-            print(f"  [ERREUR] Impossible de traiter l'année {year}: {e}")
-        finally:
-            con.close()
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-            print(f"  > Année {year} terminée en {_elapsed(t_year)}. Disque purgé.")
+                for sector_key, sector_cfg in sectors.items():
+                    result_df = compute_sector_indicators_geo(con, sector_key, sector_cfg)
+                    if not result_df.empty:
+                        yearly_results[sector_key].append(result_df)
+
+                print(f"  > Mois {month_str} terminé en {_elapsed(t0)}")
+
+            except Exception as e:
+                print(f"  [ERREUR] Impossible de traiter le mois {month_str}/{year}: {e}")
+            finally:
+                con.close()
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+
+        print(f"\n  [SAUVEGARDE] Génération des fichiers annuels pour {year}...")
+        for sector_key in sectors.keys():
+            if yearly_results[sector_key]:
+                final_yearly_df = pd.concat(yearly_results[sector_key], ignore_index=True)
+                final_yearly_df = final_yearly_df.sort_values(by=["period", "region_key"])
+                
+                out_path = args.output_dir / f"{sector_key}_{year}_monthly.parquet"
+                final_yearly_df.to_parquet(out_path, index=False)
+                print(f"    ✓ {sector_key} ({year}) : {len(final_yearly_df)} lignes sauvegardées.")
+            else:
+                print(f"    ⚠ {sector_key} : Aucune donnée pour toute l'année {year}.")
+
+        print(f"  > Année {year} complètement terminée en {_elapsed(t_year)}.")
 
     print(f"\n{'═'*65}\nPipeline complet terminé en {_elapsed(t_total)}\n{'═'*65}\n")
 

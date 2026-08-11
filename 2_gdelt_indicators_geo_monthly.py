@@ -17,28 +17,29 @@ import numpy as np
 
 # ── CONFIGURATION GÉOGRAPHIQUE (CODES FIPS 10-4) ──────────────────────────────
 # GDELT utilise le format FIPS (ex: Chine = CH, et non CN)
-REGIONS = {
-    "US": ["US"],
-    "China": ["CH"],
-    "India": ["IN"],
-    "Russia": ["RS"],
-    "France": ["FR"],
-    "Japan": ["JA"],
-    "Lebanon": ["LE"],
-    "North America": ["US", "CA", "MX"],
-    "South America": ["AR", "BL", "BR", "CI", "CO", "EC", "GY", "PM", "PA", "PE", "UY", "VE", "NS"],
-    "European Union": [
-        "AU", "BE", "BU", "HR", "CY", "EZ", "DA", "EN", "FI", "FR", "GM", "GR", 
-        "HU", "EI", "IT", "LG", "LH", "MT", "NL", "PL", "PO", "RO", "LO", "SI", "SP", "SW", "LU"
-    ],
-    "Middle East": ["SA", "IR", "IZ", "SY", "JO", "IS", "LE", "KU", "QA", "AE", "YM", "MU", "BA", "TU"],
-    "South East Asia": ["ID", "MY", "PH", "SN", "TH", "VM", "CB", "LA", "BM", "BX", "TT"],
-    "Africa": [
-        "AG", "AO", "BN", "BC", "UV", "BY", "CM", "CV", "CT", "CD", "DJ", "EG", "EK", "ER", "ET", 
-        "GB", "GA", "GH", "GV", "PU", "KE", "LT", "LI", "LY", "MA", "MI", "ML", "MR", "MP", "WA", 
-        "NG", "NI", "RW", "SG", "SE", "SL", "SO", "SF", "OD", "WZ", "TZ", "TO", "TS", "UG", "ZA", "ZI", "CN", "CF", "IV", "MO", "MZ", "CG", "TP", "SU"
-    ]
-}
+# REGIONS = {
+#     "US": ["US"],
+#     "China": ["CH"],
+#     "India": ["IN"],
+#     "Russia": ["RS"],
+#     "France": ["FR"],
+#     "Japan": ["JA"],
+#     "Lebanon": ["LE"],
+#     "North America": ["US", "CA", "MX"],
+#     "South America": ["AR", "BL", "BR", "CI", "CO", "EC", "GY", "PM", "PA", "PE", "UY", "VE", "NS"],
+#     "European Union": [
+#         "AU", "BE", "BU", "HR", "CY", "EZ", "DA", "EN", "FI", "FR", "GM", "GR", 
+#         "HU", "EI", "IT", "LG", "LH", "MT", "NL", "PL", "PO", "RO", "LO", "SI", "SP", "SW", "LU"
+#     ],
+#     "Middle East": ["SA", "IR", "IZ", "SY", "JO", "IS", "LE", "KU", "QA", "AE", "YM", "MU", "BA", "TU"],
+#     "South East Asia": ["ID", "MY", "PH", "SN", "TH", "VM", "CB", "LA", "BM", "BX", "TT"],
+#     "Africa": [
+#         "AG", "AO", "BN", "BC", "UV", "BY", "CM", "CV", "CT", "CD", "DJ", "EG", "EK", "ER", "ET", 
+#         "GB", "GA", "GH", "GV", "PU", "KE", "LT", "LI", "LY", "MA", "MI", "ML", "MR", "MP", "WA", 
+#         "NG", "NI", "RW", "SG", "SE", "SL", "SO", "SF", "OD", "WZ", "TZ", "TO", "TS", "UG", "ZA", "ZI", "CN", "CF", "IV", "MO", "MZ", "CG", "TP", "SU"
+#     ]
+# }
+REGIONS = {"UK" :["UK"] } 
 # ──────────────────────────────────────────────────────────────────────────────
 
 
@@ -280,7 +281,7 @@ def parse_args():
     p.add_argument("--parquet_dir",  type=Path, default=Path("/data/gdelt/gdelt_parquet_db"))
     p.add_argument("--source_map",   type=Path, default=Path("/data/gdelt/gdelt_sources_mapping.json"))
     p.add_argument("--config",       type=Path, default=Path("./sectors_config.json"))
-    p.add_argument("--output_dir",   type=Path, default=Path("./indicators_geo_monthly"))
+    p.add_argument("--output_dir",   type=Path, default=Path("./indicators_geo_monthly_UK"))
     p.add_argument("--sectors",      nargs="*", default=None)
     # 🔥 Nouveaux seuils de mots
     p.add_argument("--min_words",    type=int, default=150)

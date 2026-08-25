@@ -1,8 +1,9 @@
 """
-build_gdelt_indicators_geo.py
-=============================
+build_gdelt_indicators_geo_15min_weekly.py
+=========================================
 Pipeline GDELT intégrant la dimension géographique.
-Calcule les 10 indicateurs par jour ET par zone géographique spécifiée.
+Calcule les indicateurs par tranches de 15 minutes ET par zone géographique.
+Traitement par batchs hebdomadaires.
 """
 
 import argparse
@@ -13,19 +14,15 @@ import shutil
 import duckdb
 import pandas as pd
 import numpy as np
+from datetime import datetime
 
 
 # ── CONFIGURATION GÉOGRAPHIQUE (CODES FIPS 10-4) ──────────────────────────────
-# GDELT utilise le format FIPS (ex: Chine = CH, et non CN)
 REGIONS = {
-    "US": ["US"],
-    # "China": ["CH"],
-    "France": ["FR"],
-    # "Italy": ["IT"], 
-    # "Brazil": ["BR"],
-    # "Iran": ["IR"],
-    "UK" :["UK"]
+    "IS": ["IS"]
 }
+# ──────────────────────────────────────────────────────────────────────────────
+
 
 def _fmt(n: int) -> str:
     return f"{n:>14,}"
@@ -50,32 +47,7 @@ def make_connection(threads: int, memory_gb: int) -> duckdb.DuckDBPyConnection:
 # 1. MATÉRIALISATION ET GÉOGRAPHIE
 # ══════════════════════════════════════════════════════════════════════════════
 
-def compute_global_whitelist(con, parquet_dir, source_map_path, min_articles, min_years):
-    glob_pattern = str(parquet_dir / "gdelt_*.parquet")
-    with open(source_map_path, "r", encoding="utf-8") as f:
-        source_map = json.load(f)
-    con.register("src_map", pd.DataFrame({
-        "SourceCommonName_ID": [int(k) for k in source_map["id_to_source"]],
-        "SourceCommonName":    list(source_map["id_to_source"].values()),
-    }))
-    con.execute(fr"""
-        CREATE TABLE global_valid_sources AS
-        WITH raw_src AS (
-            SELECT 
-                COALESCE(NULLIF(r.SourceCommonName_ID, 0), m.SourceCommonName_ID) AS Src_ID,
-                substr(CAST(DATE AS VARCHAR), 1, 4) AS pub_year
-            FROM read_parquet('{glob_pattern}') r
-            LEFT JOIN src_map m ON RTRIM(regexp_extract(r.DocumentIdentifier, 'https?://(?:www\.)?([^/?:]+)', 1), '\.') = m.SourceCommonName
-            WHERE regexp_matches(CAST(DATE AS VARCHAR), '^\d{{14}}$')
-              AND GKGRECORDID != '20210925181500-T1111'
-        )
-        SELECT Src_ID FROM raw_src WHERE Src_ID IS NOT NULL
-        GROUP BY Src_ID HAVING COUNT(*) >= {min_articles} AND COUNT(DISTINCT pub_year) >= {min_years};
-    """)
-    con.execute("COPY global_valid_sources TO 'valid_sources_whitelist.parquet' (FORMAT PARQUET)")
-    print(f"  ✓ Whitelist globale générée : {con.execute('SELECT COUNT(*) FROM global_valid_sources').fetchone()[0]:,} sources.")
-
-def build_materialized_clean_table(con, glob_pattern, source_map_path, retained_ids_path, min_words, max_words, min_themes, month_str):
+def build_materialized_clean_table(con, glob_pattern, source_map_path, retained_ids_path, min_words, max_words, min_themes, start_str, end_str):
     with open(source_map_path, "r", encoding="utf-8") as f:
         source_map = json.load(f)
     con.register("src_map", pd.DataFrame({
@@ -89,12 +61,13 @@ def build_materialized_clean_table(con, glob_pattern, source_map_path, retained_
         FROM read_csv('{retained_ids_path}', header=False)
     """)
     
+    # Filtrage précis entre start_str et end_str (inclus)
     con.execute(fr"""
         CREATE TEMPORARY TABLE temp_mapped AS
         WITH raw AS (
             SELECT * FROM read_parquet('{glob_pattern}')
             WHERE regexp_matches(CAST(DATE AS VARCHAR), '^\d{{14}}$')
-              AND substr(CAST(DATE AS VARCHAR), 5, 2) = '{month_str}'  -- 🔥 FILTRE DU MOIS ICI
+              AND substr(CAST(DATE AS VARCHAR), 1, 8) BETWEEN '{start_str}' AND '{end_str}'
               AND GKGRECORDID != '20210925181500-T1111'
               AND EnhancedThemes IS NOT NULL AND EnhancedThemes != ''
               AND WordCount BETWEEN {min_words} AND {max_words}
@@ -109,7 +82,8 @@ def build_materialized_clean_table(con, glob_pattern, source_map_path, retained_
         CREATE TABLE gkg_clean AS
         SELECT 
             m.GKGRECORDID,
-            date_trunc('month', strptime(substr(CAST(m.DATE AS VARCHAR), 1, 8), '%Y%m%d')::DATE)::DATE AS period, -- 🔥 AGRÉGATION MENSUELLE
+            -- Bucketing 15 minutes
+            time_bucket(INTERVAL '15 Minutes', strptime(CAST(m.DATE AS VARCHAR), '%Y%m%d%H%M%S')) AS period,
             CAST(m.Tone AS DOUBLE) AS tone,
             SIGN(CAST(m.Tone AS DOUBLE)) AS tone_bin,
             ARRAY_LENGTH(string_split(m.EnhancedThemes, ';')) AS total_themes_count,
@@ -126,10 +100,6 @@ def build_materialized_clean_table(con, glob_pattern, source_map_path, retained_
     """)
 
 def map_articles_to_regions(con):
-    """
-    Croise la liste des pays de chaque article avec nos cibles géographiques.
-    Un article peut appartenir à plusieurs régions simultanément.
-    """
     region_rows = [{"region_key": k, "country_code": c} for k, codes in REGIONS.items() for c in codes]
     con.register("regions_map", pd.DataFrame(region_rows))
     
@@ -141,10 +111,6 @@ def map_articles_to_regions(con):
     """)
 
 def compute_total_news_regional(con):
-    """
-    Calcule le nombre d'articles TOTAL par jour ET par région.
-    Ce sera notre dénominateur pour l'Attention locale.
-    """
     con.execute("""
         CREATE TABLE total_news_region_tbl AS
         SELECT period, region_key, COUNT(DISTINCT GKGRECORDID) AS total_news_region
@@ -156,6 +122,7 @@ def compute_total_news_regional(con):
 # ══════════════════════════════════════════════════════════════════════════════
 # 2. CALCUL DES INDICATEURS GÉOGRAPHIQUES
 # ══════════════════════════════════════════════════════════════════════════════
+
 def compute_sector_indicators_geo(con, sector_key, sector_cfg):
     categories = sector_cfg["categories"]
     con.register("sector_themes_tbl", pd.DataFrame([
@@ -163,15 +130,12 @@ def compute_sector_indicators_geo(con, sector_key, sector_cfg):
         for cat_key, cat_cfg in categories.items() for theme in cat_cfg["themes"]
     ]))
 
-    # 🔥 REQUÊTE HAUTEMENT OPTIMISÉE POUR ÉVITER L'EXPLOSION DE LA MÉMOIRE (TEMP FILES)
     query = """
     WITH 
-    -- 1. On "dépile" les thèmes SANS les régions (pour éviter l'explosion combinatoire)
     article_theme_unnest AS (
         SELECT GKGRECORDID, period, tone, tone_bin, total_themes_count, unnest(themes_list) as theme
         FROM gkg_clean
     ),
-    -- 2. On matche avec le dictionnaire du secteur (filtre massif et immédiat)
     matched_themes AS (
         SELECT 
             u.GKGRECORDID, u.period, u.tone, u.tone_bin, u.total_themes_count, st.cat_key,
@@ -180,21 +144,19 @@ def compute_sector_indicators_geo(con, sector_key, sector_cfg):
         INNER JOIN sector_themes_tbl st ON u.theme = st.theme
         GROUP BY 1, 2, 3, 4, 5, 6
     ),
-    -- 3. SEULEMENT MAINTENANT, on multiplie par les zones géographiques !
     matched_with_regions AS (
         SELECT 
             mt.GKGRECORDID, mt.period, ar.region_key, mt.tone, mt.tone_bin, mt.total_themes_count, mt.cat_key, mt.theme_hits
         FROM matched_themes mt
         INNER JOIN article_regions ar ON mt.GKGRECORDID = ar.GKGRECORDID
     ),
-    
     article_cat AS (
         SELECT 
             GKGRECORDID, period, region_key, cat_key, tone, tone_bin,
             (theme_hits::DOUBLE / total_themes_count) AS w
         FROM matched_with_regions
     ),
-    monthly_cat AS (
+    daily_cat AS (
         SELECT 
             period, region_key, cat_key AS granularity,
             COUNT(*) AS N, SUM(w) AS sum_w, SUM(tone) AS sum_t_cont, SUM(tone_bin) AS sum_t_bin,
@@ -209,7 +171,7 @@ def compute_sector_indicators_geo(con, sector_key, sector_cfg):
         FROM matched_with_regions
         GROUP BY GKGRECORDID, period, region_key
     ),
-    monthly_sector AS (
+    daily_sector AS (
         SELECT 
             period, region_key, '__sector__' AS granularity,
             COUNT(*) AS N, SUM(w_sector) AS sum_w, SUM(tone) AS sum_t_cont, SUM(tone_bin) AS sum_t_bin,
@@ -217,7 +179,7 @@ def compute_sector_indicators_geo(con, sector_key, sector_cfg):
         FROM article_sector GROUP BY period, region_key
     )
 
-    SELECT * FROM monthly_cat UNION ALL SELECT * FROM monthly_sector
+    SELECT * FROM daily_cat UNION ALL SELECT * FROM daily_sector
     """
 
     long_df = con.execute(query).df()
@@ -228,10 +190,8 @@ def compute_sector_indicators_geo(con, sector_key, sector_cfg):
     total_news["period"] = pd.to_datetime(total_news["period"])
     long_df["period"] = pd.to_datetime(long_df["period"])
 
-    # Jointure avec le total régional
     long_df = long_df.merge(total_news, on=["period", "region_key"], how="left")
 
-    # ── Calcul des Indicateurs ──────────────────────────────────────────────
     long_df["att"]              = long_df["N"] / long_df["total_news_region"]
     long_df["att_weight"]       = long_df["sum_w"] / long_df["total_news_region"]
     long_df["sent_cont"]        = np.where(long_df["N"] > 0, long_df["sum_t_cont"] / long_df["N"], np.nan)
@@ -246,11 +206,7 @@ def compute_sector_indicators_geo(con, sector_key, sector_cfg):
     metrics = ["att", "att_weight", "sent_cont", "sent_bin", "sent_cont_weight", "sent_bin_weight",
                "axs_cont", "axs_cont_weight", "axs_bin", "axs_bin_weight"]
 
-    # ── PIVOTAGE PUISSANT (Pandas gère nativement le MultiIndex) ────────────
-    # Résultat : une ligne par (Date, Région), et une colonne par (Métrique_Catégorie)
     pivot_df = long_df.pivot(index=["period", "region_key"], columns="granularity", values=metrics)
-    
-    # Aplatissement des noms de colonnes pour qu'ils soient lisibles
     pivot_df.columns = [f"{m}_{sector_key}" if g == "__sector__" else f"{m}_{sector_key}_{g}" for m, g in pivot_df.columns]
     
     return pivot_df.reset_index()
@@ -265,17 +221,20 @@ def parse_args():
     p.add_argument("--parquet_dir",  type=Path, default=Path("/data/gdelt/gdelt_parquet_db"))
     p.add_argument("--source_map",   type=Path, default=Path("/data/gdelt/gdelt_sources_mapping.json"))
     p.add_argument("--config",       type=Path, default=Path("./sectors_config.json"))
-    p.add_argument("--output_dir",   type=Path, default=Path("./indicators_geo_monthly_UK"))
+    p.add_argument("--output_dir",   type=Path, default=Path("./data/indicators_geo_IS_15min"))
     p.add_argument("--sectors",      nargs="*", default=None)
-    # 🔥 Nouveaux seuils de mots
     p.add_argument("--min_words",    type=int, default=150)
     p.add_argument("--max_words",    type=int, default=5500)
-    # 🔥 Fichier des IDs retenus (votre whitelist manuelle)
     p.add_argument("--retained_ids", type=Path, default=Path("gold_standard_whitelist_v2.txt"))
     p.add_argument("--min_themes",   type=int, default=2)
     p.add_argument("--threads",      type=int, default=16)
-    p.add_argument("--memory_gb",    type=int, default=150) 
+    p.add_argument("--memory_gb",    type=int, default=150)
+    # Arguments de dates (YYYYMMDD ou YYYY-MM-DD)
+    p.add_argument("--start_date",   type=str, default="20230907", help="Format: YYYYMMDD ou YYYY-MM-DD")
+    p.add_argument("--end_date",     type=str, default="20231107", help="Format: YYYYMMDD ou YYYY-MM-DD")
     return p.parse_args()
+
+
 def main():
     args = parse_args()
     t_total = time.time()
@@ -288,73 +247,85 @@ def main():
     args.output_dir.mkdir(parents=True, exist_ok=True)
     tmp_dir = Path("./duckdb_tmp")
 
-    # On liste directement les fichiers et on attaque le traitement
-    all_files = list(args.parquet_dir.glob("gdelt_*.parquet"))
-    years = sorted(list(set([f.name.split('_')[1][:4] for f in all_files if f.name.split('_')[1][:4].isdigit()])))
-    print(f"\n[INFO] Années détectées pour le traitement : {years}")
-    print(f"[INFO] Régions configurées : {list(REGIONS.keys())}")
-    print(f"[INFO] Fichier de sources utilisé : {args.retained_ids}")
+    # Génération des chunks hebdomadaires
+    start_dt = pd.to_datetime(args.start_date)
+    end_dt = pd.to_datetime(args.end_date)
+    
+    # Découpage en intervalles de 7 jours
+    intervals = []
+    curr = start_dt
+    while curr <= end_dt:
+        nxt = min(curr + pd.Timedelta(days=6), end_dt)
+        intervals.append((curr.strftime("%Y%m%d"), nxt.strftime("%Y%m%d"), curr.year, nxt.year))
+        curr = nxt + pd.Timedelta(days=1)
 
-    for year in years:
-        print(f"\n{'═'*65}\n  TRAITEMENT BATCH ANNÉE {year}\n{'═'*65}")
-        t_year = time.time()
+    print(f"\n[INFO] Découpage en {len(intervals)} semaines entre {start_dt.date()} et {end_dt.date()}")
+
+    # Stockage des résultats par secteur
+    collected_results = {sector_key: [] for sector_key in sectors.keys()}
+
+    for i, (w_start, w_end, y_start, y_end) in enumerate(intervals, 1):
+        print(f"\n{'═'*65}\n  SEMAINE {i}/{len(intervals)} : {w_start} -> {w_end}\n{'═'*65}")
+        t_week = time.time()
         
-        # On cible le(s) fichier(s) de l'année (peu importe comment sont gérés les mois dans les noms de fichiers)
-        glob_pattern = str(args.parquet_dir / f"gdelt_{year}*.parquet")
+        # Sélection des parquets nécessaires pour la période
+        if y_start == y_end:
+            glob_pattern = str(args.parquet_dir / f"gdelt_{y_start}*.parquet")
+        else:
+            glob_pattern = str(args.parquet_dir / "gdelt_*.parquet")
         
-        yearly_results = {sector_key: [] for sector_key in sectors.keys()}
+        if tmp_dir.exists(): 
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        tmp_dir.mkdir(exist_ok=True)
         
-        for month in range(1, 13):
-            month_str = f"{month:02d}"
+        con = make_connection(args.threads, args.memory_gb)
+        
+        try:
+            build_materialized_clean_table(
+                con, glob_pattern, args.source_map, args.retained_ids, 
+                args.min_words, args.max_words, args.min_themes, 
+                w_start, w_end
+            )
             
-            if tmp_dir.exists(): shutil.rmtree(tmp_dir, ignore_errors=True)
-            tmp_dir.mkdir(exist_ok=True)
+            count_clean = con.execute("SELECT COUNT(*) FROM gkg_clean").fetchone()[0]
+            if count_clean == 0:
+                print(f"  ⚠ Aucun article nettoyé pour {w_start} -> {w_end}.")
+                continue
             
-            con = make_connection(args.threads, args.memory_gb)
+            print(f"  --- Données chargées : {count_clean:,} articles ---")
+
+            map_articles_to_regions(con)
+            compute_total_news_regional(con)
+
+            for sector_key, sector_cfg in sectors.items():
+                result_df = compute_sector_indicators_geo(con, sector_key, sector_cfg)
+                if not result_df.empty:
+                    collected_results[sector_key].append(result_df)
+
+            print(f"  > Semaine {w_start}_{w_end} terminée en {_elapsed(t_week)}")
+
+        except Exception as e:
+            print(f"  [ERREUR] Échec sur la semaine {w_start}->{w_end}: {e}")
+        finally:
+            con.close()
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    # ── Sauvegarde Finale ─────────────────────────────────────────────────────
+    print(f"\n{'═'*65}\n  [SAUVEGARDE FINALE DES FICHIERS 15-MIN]\n{'═'*65}")
+    date_suffix = f"{start_dt.strftime('%Y%m%d')}_{end_dt.strftime('%Y%m%d')}"
+    
+    for sector_key in sectors.keys():
+        if collected_results[sector_key]:
+            final_df = pd.concat(collected_results[sector_key], ignore_index=True)
+            final_df = final_df.sort_values(by=["period", "region_key"])
             
-            try:
-                t0 = time.time()
-                # On passe month_str à la requête SQL
-                build_materialized_clean_table(con, glob_pattern, args.source_map, args.retained_ids, args.min_words, args.max_words, args.min_themes, month_str)
-                
-                # Vérifier si des articles ont été trouvés pour ce mois
-                count_clean = con.execute("SELECT COUNT(*) FROM gkg_clean").fetchone()[0]
-                if count_clean == 0:
-                    continue  # Si aucun article ce mois-ci, on passe au suivant
-                
-                print(f"  --- Traitement du mois {month_str}/{year} ({count_clean:,} articles) ---")
+            out_path = args.output_dir / f"{sector_key}_{date_suffix}_15min.parquet"
+            final_df.to_parquet(out_path, index=False)
+            print(f"  ✓ {sector_key} : {len(final_df):,} lignes écrites dans -> {out_path.name}")
+        else:
+            print(f"  ⚠ {sector_key} : Aucune donnée générée.")
 
-                map_articles_to_regions(con)
-                compute_total_news_regional(con)
-
-                for sector_key, sector_cfg in sectors.items():
-                    result_df = compute_sector_indicators_geo(con, sector_key, sector_cfg)
-                    if not result_df.empty:
-                        yearly_results[sector_key].append(result_df)
-
-                print(f"  > Mois {month_str} terminé en {_elapsed(t0)}")
-
-            except Exception as e:
-                print(f"  [ERREUR] Impossible de traiter le mois {month_str}/{year}: {e}")
-            finally:
-                con.close()
-                shutil.rmtree(tmp_dir, ignore_errors=True)
-
-        print(f"\n  [SAUVEGARDE] Génération des fichiers annuels pour {year}...")
-        for sector_key in sectors.keys():
-            if yearly_results[sector_key]:
-                final_yearly_df = pd.concat(yearly_results[sector_key], ignore_index=True)
-                final_yearly_df = final_yearly_df.sort_values(by=["period", "region_key"])
-                
-                out_path = args.output_dir / f"{sector_key}_{year}_monthly.parquet"
-                final_yearly_df.to_parquet(out_path, index=False)
-                print(f"    ✓ {sector_key} ({year}) : {len(final_yearly_df)} lignes sauvegardées.")
-            else:
-                print(f"    ⚠ {sector_key} : Aucune donnée pour toute l'année {year}.")
-
-        print(f"  > Année {year} complètement terminée en {_elapsed(t_year)}.")
-
-    print(f"\n{'═'*65}\nPipeline complet terminé en {_elapsed(t_total)}\n{'═'*65}\n")
+    print(f"\nPipeline terminé en {_elapsed(t_total)}\n")
 
 if __name__ == "__main__":
     main()

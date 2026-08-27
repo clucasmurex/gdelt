@@ -19,12 +19,12 @@ import numpy as np
 # GDELT utilise le format FIPS (ex: Chine = CH, et non CN)
 REGIONS = {
     "US": ["US"],
-    "China": ["CH"],
+    # "China": ["CH"],
     "France": ["FR"],
-    "Italy": ["IT"], 
-    "Brazil": ["BR"],
-    "Iran": ["IR"],
-    # "UK" :["UK"]
+    # "Italy": ["IT"], 
+    # "Brazil": ["BR"],
+    # "Iran": ["IR"],
+    "UK" :["UK"]
 }
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -267,7 +267,7 @@ def parse_args():
     p.add_argument("--parquet_dir",  type=Path, default=Path("/data/gdelt/gdelt_parquet_db"))
     p.add_argument("--source_map",   type=Path, default=Path("/data/gdelt/gdelt_sources_mapping.json"))
     p.add_argument("--config",       type=Path, default=Path("./sectors_config.json"))
-    p.add_argument("--output_dir",   type=Path, default=Path("./data/indicators_geo_daily_COVID"))
+    p.add_argument("--output_dir",   type=Path, default=Path("./data/indicators_geo_daily"))
     p.add_argument("--sectors",      nargs="*", default=None)
     p.add_argument("--min_words",    type=int, default=150)
     p.add_argument("--max_words",    type=int, default=5500)

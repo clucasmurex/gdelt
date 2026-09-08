@@ -1,8 +1,8 @@
 """
-build_gdelt_indicators_geo.py
-=============================
-Pipeline GDELT intégrant la dimension géographique.
-Calcule les 10 indicateurs par jour ET par zone géographique spécifiée.
+build_gdelt_indicators_geo_source.py
+====================================
+Pipeline GDELT intégrant la dimension géographique ET la source.
+Calcule les 10 indicateurs par mois, par zone géographique, ET par média.
 """
 
 import argparse
@@ -16,15 +16,8 @@ import numpy as np
 
 
 # ── CONFIGURATION GÉOGRAPHIQUE (CODES FIPS 10-4) ──────────────────────────────
-# GDELT utilise le format FIPS (ex: Chine = CH, et non CN)
 REGIONS = {
-    "US": ["US"],
-    # "China": ["CH"],
     "France": ["FR"],
-    # "Italy": ["IT"], 
-    # "Brazil": ["BR"],
-    # "Iran": ["IR"],
-    "UK" :["UK"]
 }
 
 def _fmt(n: int) -> str:
@@ -94,7 +87,7 @@ def build_materialized_clean_table(con, glob_pattern, source_map_path, retained_
         WITH raw AS (
             SELECT * FROM read_parquet('{glob_pattern}')
             WHERE regexp_matches(CAST(DATE AS VARCHAR), '^\d{{14}}$')
-              AND substr(CAST(DATE AS VARCHAR), 5, 2) = '{month_str}'  -- 🔥 FILTRE DU MOIS ICI
+              AND substr(CAST(DATE AS VARCHAR), 5, 2) = '{month_str}'
               AND GKGRECORDID != '20210925181500-T1111'
               AND EnhancedThemes IS NOT NULL AND EnhancedThemes != ''
               AND WordCount BETWEEN {min_words} AND {max_words}
@@ -109,7 +102,8 @@ def build_materialized_clean_table(con, glob_pattern, source_map_path, retained_
         CREATE TABLE gkg_clean AS
         SELECT 
             m.GKGRECORDID,
-            date_trunc('month', strptime(substr(CAST(m.DATE AS VARCHAR), 1, 8), '%Y%m%d')::DATE)::DATE AS period, -- 🔥 AGRÉGATION MENSUELLE
+            m.Src_ID, -- 🔥 CONSERVATION DE LA SOURCE
+            date_trunc('month', strptime(substr(CAST(m.DATE AS VARCHAR), 1, 8), '%Y%m%d')::DATE)::DATE AS period,
             CAST(m.Tone AS DOUBLE) AS tone,
             SIGN(CAST(m.Tone AS DOUBLE)) AS tone_bin,
             ARRAY_LENGTH(string_split(m.EnhancedThemes, ';')) AS total_themes_count,
@@ -126,95 +120,87 @@ def build_materialized_clean_table(con, glob_pattern, source_map_path, retained_
     """)
 
 def map_articles_to_regions(con):
-    """
-    Croise la liste des pays de chaque article avec nos cibles géographiques.
-    Un article peut appartenir à plusieurs régions simultanément.
-    """
     region_rows = [{"region_key": k, "country_code": c} for k, codes in REGIONS.items() for c in codes]
     con.register("regions_map", pd.DataFrame(region_rows))
     
     con.execute("""
         CREATE TABLE article_regions AS
-        SELECT DISTINCT g.GKGRECORDID, g.period, rm.region_key
+        SELECT DISTINCT g.GKGRECORDID, g.period, g.Src_ID, rm.region_key
         FROM gkg_clean g, unnest(g.countries_list) AS c(code)
         INNER JOIN regions_map rm ON c.code = rm.country_code
     """)
 
-def compute_total_news_regional(con):
+def compute_total_news_source(con):
     """
-    Calcule le nombre d'articles TOTAL par jour ET par région.
-    Ce sera notre dénominateur pour l'Attention locale.
+    Calcule le nombre d'articles TOTAL par mois, par région ET par source.
+    Dénominateur pour calculer l'Attention propre à chaque média.
     """
     con.execute("""
-        CREATE TABLE total_news_region_tbl AS
-        SELECT period, region_key, COUNT(DISTINCT GKGRECORDID) AS total_news_region
+        CREATE TABLE total_news_source_tbl AS
+        SELECT period, region_key, Src_ID, COUNT(DISTINCT GKGRECORDID) AS total_news_source
         FROM article_regions
-        GROUP BY 1, 2 ORDER BY 1, 2
+        GROUP BY 1, 2, 3 ORDER BY 1, 2, 3
     """)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 2. CALCUL DES INDICATEURS GÉOGRAPHIQUES
+# 2. CALCUL DES INDICATEURS GÉOGRAPHIQUES ET SOURCES
 # ══════════════════════════════════════════════════════════════════════════════
-def compute_sector_indicators_geo(con, sector_key, sector_cfg):
+def compute_sector_indicators_geo(con, sector_key, sector_cfg, source_map_df):
     categories = sector_cfg["categories"]
     con.register("sector_themes_tbl", pd.DataFrame([
         {"cat_key": cat_key, "theme": theme.upper()}
         for cat_key, cat_cfg in categories.items() for theme in cat_cfg["themes"]
     ]))
 
-    # 🔥 REQUÊTE HAUTEMENT OPTIMISÉE POUR ÉVITER L'EXPLOSION DE LA MÉMOIRE (TEMP FILES)
     query = """
     WITH 
-    -- 1. On "dépile" les thèmes SANS les régions (pour éviter l'explosion combinatoire)
     article_theme_unnest AS (
-        SELECT GKGRECORDID, period, tone, tone_bin, total_themes_count, unnest(themes_list) as theme
+        SELECT GKGRECORDID, period, Src_ID, tone, tone_bin, total_themes_count, unnest(themes_list) as theme
         FROM gkg_clean
     ),
-    -- 2. On matche avec le dictionnaire du secteur (filtre massif et immédiat)
     matched_themes AS (
         SELECT 
-            u.GKGRECORDID, u.period, u.tone, u.tone_bin, u.total_themes_count, st.cat_key,
+            u.GKGRECORDID, u.period, u.Src_ID, u.tone, u.tone_bin, u.total_themes_count, st.cat_key,
             COUNT(*) AS theme_hits
         FROM article_theme_unnest u
         INNER JOIN sector_themes_tbl st ON u.theme = st.theme
-        GROUP BY 1, 2, 3, 4, 5, 6
+        GROUP BY 1, 2, 3, 4, 5, 6, 7
     ),
-    -- 3. SEULEMENT MAINTENANT, on multiplie par les zones géographiques !
     matched_with_regions AS (
         SELECT 
-            mt.GKGRECORDID, mt.period, ar.region_key, mt.tone, mt.tone_bin, mt.total_themes_count, mt.cat_key, mt.theme_hits
+            mt.GKGRECORDID, mt.period, ar.region_key, mt.Src_ID, mt.tone, mt.tone_bin, mt.total_themes_count, mt.cat_key, mt.theme_hits
         FROM matched_themes mt
         INNER JOIN article_regions ar ON mt.GKGRECORDID = ar.GKGRECORDID
     ),
     
     article_cat AS (
         SELECT 
-            GKGRECORDID, period, region_key, cat_key, tone, tone_bin,
+            GKGRECORDID, period, region_key, Src_ID, cat_key, tone, tone_bin,
             (theme_hits::DOUBLE / total_themes_count) AS w
         FROM matched_with_regions
     ),
     monthly_cat AS (
         SELECT 
-            period, region_key, cat_key AS granularity,
+            period, region_key, Src_ID, cat_key AS granularity,
             COUNT(*) AS N, SUM(w) AS sum_w, SUM(tone) AS sum_t_cont, SUM(tone_bin) AS sum_t_bin,
             SUM(tone * w) AS sum_t_cont_w, SUM(tone_bin * w) AS sum_t_bin_w
-        FROM article_cat GROUP BY period, region_key, cat_key
+        FROM article_cat GROUP BY period, region_key, Src_ID, cat_key
     ),
     article_sector AS (
         SELECT 
-            GKGRECORDID, period, region_key,
+            GKGRECORDID, period, region_key, Src_ID,
             ANY_VALUE(tone) AS tone, ANY_VALUE(tone_bin) AS tone_bin,
             SUM(theme_hits)::DOUBLE / ANY_VALUE(total_themes_count) AS w_sector
         FROM matched_with_regions
-        GROUP BY GKGRECORDID, period, region_key
+        GROUP BY GKGRECORDID, period, region_key, Src_ID
     ),
     monthly_sector AS (
         SELECT 
-            period, region_key, '__sector__' AS granularity,
+            period, region_key, Src_ID, '__sector__' AS granularity,
             COUNT(*) AS N, SUM(w_sector) AS sum_w, SUM(tone) AS sum_t_cont, SUM(tone_bin) AS sum_t_bin,
             SUM(tone * w_sector) AS sum_t_cont_w, SUM(tone_bin * w_sector) AS sum_t_bin_w
-        FROM article_sector GROUP BY period, region_key
+        FROM article_sector GROUP BY period, region_key, Src_ID
     )
 
     SELECT * FROM monthly_cat UNION ALL SELECT * FROM monthly_sector
@@ -224,16 +210,16 @@ def compute_sector_indicators_geo(con, sector_key, sector_cfg):
     if long_df.empty:
         return pd.DataFrame()
 
-    total_news = con.execute("SELECT period, region_key, total_news_region FROM total_news_region_tbl").df()
+    total_news = con.execute("SELECT period, region_key, Src_ID, total_news_source FROM total_news_source_tbl").df()
     total_news["period"] = pd.to_datetime(total_news["period"])
     long_df["period"] = pd.to_datetime(long_df["period"])
 
-    # Jointure avec le total régional
-    long_df = long_df.merge(total_news, on=["period", "region_key"], how="left")
+    # Jointure avec le total de la source pour la période/région donnée
+    long_df = long_df.merge(total_news, on=["period", "region_key", "Src_ID"], how="left")
 
     # ── Calcul des Indicateurs ──────────────────────────────────────────────
-    long_df["att"]              = long_df["N"] / long_df["total_news_region"]
-    long_df["att_weight"]       = long_df["sum_w"] / long_df["total_news_region"]
+    long_df["att"]              = long_df["N"] / long_df["total_news_source"]
+    long_df["att_weight"]       = long_df["sum_w"] / long_df["total_news_source"]
     long_df["sent_cont"]        = np.where(long_df["N"] > 0, long_df["sum_t_cont"] / long_df["N"], np.nan)
     long_df["sent_bin"]         = np.where(long_df["N"] > 0, long_df["sum_t_bin"] / long_df["N"], np.nan)
     long_df["sent_cont_weight"] = np.where(long_df["sum_w"] > 0, long_df["sum_t_cont_w"] / long_df["sum_w"], np.nan)
@@ -246,14 +232,18 @@ def compute_sector_indicators_geo(con, sector_key, sector_cfg):
     metrics = ["att", "att_weight", "sent_cont", "sent_bin", "sent_cont_weight", "sent_bin_weight",
                "axs_cont", "axs_cont_weight", "axs_bin", "axs_bin_weight"]
 
-    # ── PIVOTAGE PUISSANT (Pandas gère nativement le MultiIndex) ────────────
-    # Résultat : une ligne par (Date, Région), et une colonne par (Métrique_Catégorie)
-    pivot_df = long_df.pivot(index=["period", "region_key"], columns="granularity", values=metrics)
-    
-    # Aplatissement des noms de colonnes pour qu'ils soient lisibles
+    # Pivot avec la source incluse dans l'index
+    pivot_df = long_df.pivot(index=["period", "region_key", "Src_ID"], columns="granularity", values=metrics)
     pivot_df.columns = [f"{m}_{sector_key}" if g == "__sector__" else f"{m}_{sector_key}_{g}" for m, g in pivot_df.columns]
+    pivot_df = pivot_df.reset_index()
+
+    # 🔥 Ajout du nom lisible de la source
+    pivot_df = pivot_df.merge(source_map_df, left_on="Src_ID", right_on="SourceCommonName_ID", how="left")
+    pivot_df = pivot_df.drop(columns=["SourceCommonName_ID"])
     
-    return pivot_df.reset_index()
+    # Réorganisation des colonnes pour avoir le nom de la source au début
+    cols = ["period", "region_key", "Src_ID", "SourceCommonName"] + [c for c in pivot_df.columns if c not in ["period", "region_key", "Src_ID", "SourceCommonName"]]
+    return pivot_df[cols]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -265,17 +255,16 @@ def parse_args():
     p.add_argument("--parquet_dir",  type=Path, default=Path("/data/gdelt/gdelt_parquet_db"))
     p.add_argument("--source_map",   type=Path, default=Path("/data/gdelt/gdelt_sources_mapping.json"))
     p.add_argument("--config",       type=Path, default=Path("./sectors_config.json"))
-    p.add_argument("--output_dir",   type=Path, default=Path("./indicators_geo_monthly_UK"))
+    p.add_argument("--output_dir",   type=Path, default=Path("./data/indicators_geo_source_monthly"))
     p.add_argument("--sectors",      nargs="*", default=None)
-    # 🔥 Nouveaux seuils de mots
     p.add_argument("--min_words",    type=int, default=150)
     p.add_argument("--max_words",    type=int, default=5500)
-    # 🔥 Fichier des IDs retenus (votre whitelist manuelle)
     p.add_argument("--retained_ids", type=Path, default=Path("gold_standard_whitelist_v2.txt"))
     p.add_argument("--min_themes",   type=int, default=2)
     p.add_argument("--threads",      type=int, default=16)
     p.add_argument("--memory_gb",    type=int, default=150) 
     return p.parse_args()
+
 def main():
     args = parse_args()
     t_total = time.time()
@@ -285,10 +274,17 @@ def main():
     if args.sectors:
         sectors = {k: sectors[k] for k in args.sectors}
 
+    # Charger le dictionnaire des sources en mémoire Pandas pour le mapping final
+    with open(args.source_map, "r", encoding="utf-8") as f:
+        source_map_dict = json.load(f)
+    source_map_df = pd.DataFrame({
+        "SourceCommonName_ID": [int(k) for k in source_map_dict["id_to_source"]],
+        "SourceCommonName":    list(source_map_dict["id_to_source"].values()),
+    })
+
     args.output_dir.mkdir(parents=True, exist_ok=True)
     tmp_dir = Path("./duckdb_tmp")
 
-    # On liste directement les fichiers et on attaque le traitement
     all_files = list(args.parquet_dir.glob("gdelt_*.parquet"))
     years = sorted(list(set([f.name.split('_')[1][:4] for f in all_files if f.name.split('_')[1][:4].isdigit()])))
     print(f"\n[INFO] Années détectées pour le traitement : {years}")
@@ -299,9 +295,7 @@ def main():
         print(f"\n{'═'*65}\n  TRAITEMENT BATCH ANNÉE {year}\n{'═'*65}")
         t_year = time.time()
         
-        # On cible le(s) fichier(s) de l'année (peu importe comment sont gérés les mois dans les noms de fichiers)
         glob_pattern = str(args.parquet_dir / f"gdelt_{year}*.parquet")
-        
         yearly_results = {sector_key: [] for sector_key in sectors.keys()}
         
         for month in range(1, 13):
@@ -314,21 +308,19 @@ def main():
             
             try:
                 t0 = time.time()
-                # On passe month_str à la requête SQL
                 build_materialized_clean_table(con, glob_pattern, args.source_map, args.retained_ids, args.min_words, args.max_words, args.min_themes, month_str)
                 
-                # Vérifier si des articles ont été trouvés pour ce mois
                 count_clean = con.execute("SELECT COUNT(*) FROM gkg_clean").fetchone()[0]
                 if count_clean == 0:
-                    continue  # Si aucun article ce mois-ci, on passe au suivant
+                    continue 
                 
                 print(f"  --- Traitement du mois {month_str}/{year} ({count_clean:,} articles) ---")
 
                 map_articles_to_regions(con)
-                compute_total_news_regional(con)
+                compute_total_news_source(con)
 
                 for sector_key, sector_cfg in sectors.items():
-                    result_df = compute_sector_indicators_geo(con, sector_key, sector_cfg)
+                    result_df = compute_sector_indicators_geo(con, sector_key, sector_cfg, source_map_df)
                     if not result_df.empty:
                         yearly_results[sector_key].append(result_df)
 
@@ -344,11 +336,11 @@ def main():
         for sector_key in sectors.keys():
             if yearly_results[sector_key]:
                 final_yearly_df = pd.concat(yearly_results[sector_key], ignore_index=True)
-                final_yearly_df = final_yearly_df.sort_values(by=["period", "region_key"])
+                final_yearly_df = final_yearly_df.sort_values(by=["period", "region_key", "Src_ID"])
                 
-                out_path = args.output_dir / f"{sector_key}_{year}_monthly.parquet"
+                out_path = args.output_dir / f"{sector_key}_{year}_source_monthly.parquet"
                 final_yearly_df.to_parquet(out_path, index=False)
-                print(f"    ✓ {sector_key} ({year}) : {len(final_yearly_df)} lignes sauvegardées.")
+                print(f"    ✓ {sector_key} ({year}) : {len(final_yearly_df):,} lignes sauvegardées.")
             else:
                 print(f"    ⚠ {sector_key} : Aucune donnée pour toute l'année {year}.")
 
